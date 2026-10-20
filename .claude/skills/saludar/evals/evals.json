@@ -4,12 +4,12 @@
     {
       "id": 1,
       "prompt": "hola",
-      "expected_output": "Saludo cálido con franja horaria correcta, día/fecha/hora reales de Santiago, clima actual y un pensamiento célebre bien atribuido.",
+      "expected_output": "Saludo cálido con franja horaria correcta, día/fecha/hora reales de la zona local, clima actual y un pensamiento célebre bien atribuido.",
       "files": [],
       "expectations": [
-        "El saludo usa la franja correcta según la hora de Santiago (buenos días / buenas tardes / buenas noches)",
-        "Incluye el día de la semana y la fecha reales de hoy en Santiago",
-        "Incluye la hora actual de Santiago (±5 min de la ejecución)",
+        "El saludo usa la franja correcta según la hora local (buenos días / buenas tardes / buenas noches)",
+        "Incluye el día de la semana y la fecha reales de hoy en la zona local",
+        "Incluye la hora local actual (±5 min de la ejecución)",
         "Incluye el clima actual (temperatura) obtenido de una fuente real, no inventado",
         "Incluye un pensamiento célebre con su atribución (autor u origen)",
         "La respuesta está en español y es breve (menos de ~15 líneas)"
@@ -23,7 +23,7 @@
       "expectations": [
         "Responde explícitamente a la pregunta '¿cómo estás?'",
         "Hace referencia al contexto de empezar la jornada laboral",
-        "Incluye el día, la fecha y la hora reales de Santiago",
+        "Incluye el día, la fecha y la hora reales de la zona local",
         "Incluye el clima actual (temperatura) obtenido de una fuente real",
         "Incluye un pensamiento célebre con su atribución"
       ]
@@ -34,7 +34,7 @@
       "expected_output": "Saludo breve completo y, en el mismo turno, la ayuda concreta con el endpoint GET /productos (controller JAX-RS en el package controllers con un model Producto).",
       "files": [],
       "expectations": [
-        "Saluda primero con fecha, hora y clima reales de Santiago",
+        "Saluda primero con fecha, hora y clima reales de la zona local",
         "Incluye un pensamiento célebre con su atribución",
         "Después del saludo atiende la petición: propone el código de un endpoint GET /productos que devuelve JSON",
         "El código propuesto usa el package com.andres.courses.claude.quarkus.controllers"

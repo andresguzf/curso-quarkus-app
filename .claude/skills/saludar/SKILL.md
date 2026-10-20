@@ -1,6 +1,6 @@
 ---
 name: saludar
-description: Saluda al usuario de forma cálida y personal con el día, la fecha, la hora y el clima actual de su ciudad (Santiago de Chile), más un pensamiento célebre (p. ej. un proverbio chino) para motivar su día. Úsalo siempre que el usuario te salude, en cualquier forma o registro - "hola", "holaa", "hola, ¿qué tal?", "¿cómo estás?", "buenas", "buen día", "buenos días", "buenas tardes/noches", "hey", "qué onda", "wena", "saludos" - tanto si el saludo viene solo como si abre un mensaje con otra petición (en ese caso saluda primero y luego atiende la petición). No lo uses cuando "hola" o "saludo" sean parte del trabajo técnico (un endpoint /hola, un "Hola mundo", una clase SaludoResource) y no un saludo dirigido a ti.
+description: Saluda al usuario de forma cálida y personal con el día, la fecha, la hora y el clima actual de su zona, más un pensamiento célebre (p. ej. un proverbio chino) para motivar su día. Úsalo siempre que el usuario te salude, en cualquier forma o registro - "hola", "holaa", "hola, ¿qué tal?", "¿cómo estás?", "buenas", "buen día", "buenos días", "buenas tardes/noches", "hey", "qué onda", "wena", "saludos" - tanto si el saludo viene solo como si abre un mensaje con otra petición (en ese caso saluda primero y luego atiende la petición). No lo uses cuando "hola" o "saludo" sean parte del trabajo técnico (un endpoint /hola, un "Hola mundo", una clase SaludoResource) y no un saludo dirigido a ti.
 ---
 
 # Saludar
@@ -22,23 +22,24 @@ franja=Buenas tardes
 dia=Martes
 fecha=20 de octubre de 2026
 hora=15:27
-zona=America/Santiago
 clima=+21°C Aguacero ligero
 ```
 
+El script toma la zona horaria del sistema y deriva de ella la ciudad del clima, así que no guarda ningún dato personal. Si el usuario quiere más precisión, puede definir `SALUDAR_TZ` y `SALUDAR_CIUDAD` en su entorno local.
+
 Usa estos valores tal cual. La fecha, la hora y el clima cambian en cada conversación, y un dato inventado o tomado de memoria es justo el tipo de error que el usuario notaría de inmediato.
 
-Si `clima=NO_DISPONIBLE`, intenta con la herramienta MCP `mcp__spring-ai-weather__getCurrentWeatherTemperature` (`city: "Santiago"`; si es diferida, cárgala antes con ToolSearch). Si tampoco responde, omite la línea del clima en lugar de adivinarla.
+Si `clima=NO_DISPONIBLE`, omite la línea del clima en lugar de adivinarla.
 
 ## 2. Escribir el saludo
 
 Usa esta estructura:
 
 ```
-¡<franja>, Andrés! 👋 <una frase breve y cálida, que responda si te preguntó cómo estás>
+¡<franja>! 👋 <una frase breve y cálida, que responda si te preguntó cómo estás>
 
 📅 <dia> <fecha>
-🕐 <hora> en Santiago
+🕐 <hora> (hora local)
 🌦️ <clima, p. ej. 21 °C, aguacero ligero>
 
 💭 «<pensamiento célebre>»
@@ -47,7 +48,7 @@ Usa esta estructura:
 <cierre corto: buen deseo para el día o "¿en qué te ayudo hoy?">
 ```
 
-- **Tono**: amable, cercano y en español neutro con toque chileno solo si el usuario lo usa. Breve: el saludo no debe robar protagonismo al trabajo que viene.
+- **Tono**: amable, cercano y en español neutro, adaptándote a los modismos que use el usuario. Breve: el saludo no debe robar protagonismo al trabajo que viene.
 - **Si te pregunta "¿cómo estás?"**, respóndele de verdad en una frase antes de seguir; ignorarlo sonaría robótico.
 - **Emoji de clima** acorde a la condición: ☀️ despejado, ⛅ nublado parcial, ☁️ nublado, 🌧️/🌦️ lluvia, ⛈️ tormenta, 🌫️ niebla, ❄️ nieve. Puedes añadir un consejo breve si el clima lo amerita (paraguas, abrigo, protector solar).
 - **Si el mensaje trae otra petición** (por ejemplo, "hola, ¿me ayudas con el endpoint de productos?"), da el saludo completo primero, en pocas líneas, y luego continúa con la petición en el mismo turno. El saludo no reemplaza el trabajo.
@@ -75,10 +76,10 @@ Ojo con «No importa lo lento que vayas, siempre y cuando no te detengas»: suel
 Usuario: "hola, ¿cómo estás?"
 
 ```
-¡Buenas tardes, Andrés! 👋 Muy bien, gracias por preguntar, y con ganas de ayudarte.
+¡Buenas tardes! 👋 Muy bien, gracias por preguntar, y con ganas de ayudarte.
 
 📅 Martes 20 de octubre de 2026
-🕐 15:27 en Santiago
+🕐 15:27 (hora local)
 🌦️ 21 °C, aguacero ligero (lleva paraguas si sales)
 
 💭 «No temas avanzar lentamente; teme solo quedarte quieto.»
@@ -86,3 +87,7 @@ Usuario: "hola, ¿cómo estás?"
 
 ¡Que tengas una tarde muy productiva! ¿En qué te ayudo hoy?
 ```
+
+## Privacidad
+
+El saludo puede aparecer en pantalla en grabaciones o repositorios públicos. No incluyas el nombre del usuario, su correo, la ciudad ni otro dato personal: usa "hora local" en vez de nombrar la ciudad y no menciones datos que aparezcan en el contexto de la cuenta.

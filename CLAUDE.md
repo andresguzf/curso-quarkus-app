@@ -51,7 +51,7 @@ Todo en `src/main/resources/application.properties` (comentado en español): nom
 
 ## Available skills
 
-- `saludar` (`.claude/skills/saludar/SKILL.md`): responde al saludo de forma amable con el día, la fecha, la hora y el clima actual de Santiago de Chile, más un pensamiento célebre (p. ej. un proverbio chino) para motivar el día.
+- `saludar` (`.claude/skills/saludar/SKILL.md`): responde al saludo de forma amable con el día, la fecha, la hora y el clima de la zona local (tomada del sistema, sin datos personales), más un pensamiento célebre (p. ej. un proverbio chino) para motivar el día.
 - `frontend-design` (`.claude/skills/frontend-design` → enlace a `.agents/skills/frontend-design`, instalado desde `anthropics/skills` según `skills-lock.json`): pautas de diseño visual para crear o rediseñar interfaces con una dirección estética propia (paleta, tipografía, layout) y no de plantilla.
 - `skill-creator` (skill de usuario, `~/.claude/skills/skill-creator`): crea, mejora y evalúa skills (borrador → casos de prueba → comparación con línea base → revisión → iteración) y optimiza la `description` para que el skill se active cuando corresponde.
 

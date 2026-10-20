@@ -1,13 +1,27 @@
 #!/usr/bin/env bash
 # Imprime el contexto actual para el saludo: fecha, hora, franja del día y clima.
-# Uso: contexto.sh [zona_horaria] [ciudad]
-# Por defecto: America/Santiago y "Santiago,Chile".
+# No contiene datos personales: la zona horaria sale del sistema y la ciudad
+# del clima se deriva de ella. Se pueden sobrescribir con variables de entorno
+# locales (no versionadas):
+#   SALUDAR_TZ       p. ej. "America/Mexico_City"
+#   SALUDAR_CIUDAD   p. ej. "Ciudad de Mexico" (más precisa para el clima)
 set -u
 
-TZ_CIUDAD="${1:-America/Santiago}"
-CIUDAD="${2:-Santiago,Chile}"
+zona_sistema() {
+  if [ -L /etc/localtime ]; then
+    readlink /etc/localtime | sed 's#.*/zoneinfo/##'
+  elif [ -f /etc/timezone ]; then
+    cat /etc/timezone
+  else
+    echo "UTC"
+  fi
+}
 
-export TZ="$TZ_CIUDAD"
+ZONA="${SALUDAR_TZ:-$(zona_sistema)}"
+# "America/Mexico_City" -> "Mexico City"; "America/Argentina/Buenos_Aires" -> "Buenos Aires"
+CIUDAD="${SALUDAR_CIUDAD:-$(printf '%s' "${ZONA##*/}" | tr '_' ' ')}"
+
+export TZ="$ZONA"
 export LC_ALL=es_ES.UTF-8
 
 dia=$(date "+%A")
@@ -21,7 +35,8 @@ else franja="Buenas noches"
 fi
 
 # Clima desde wttr.in (temperatura + condición en español). Vacío si falla.
-clima=$(curl -fsS -m 6 "https://wttr.in/${CIUDAD}?format=%t+%C&lang=es" 2>/dev/null | tr -d '\n')
+ciudad_url=$(printf '%s' "$CIUDAD" | sed 's/ /+/g')
+clima=$(curl -fsS -m 6 "https://wttr.in/${ciudad_url}?format=%t+%C&lang=es" 2>/dev/null | tr -d '\n')
 case "$clima" in
   *Unknown*|*unknown*|*Sorry*|*rror*) clima="" ;;
 esac
@@ -33,5 +48,4 @@ echo "franja=$franja"
 echo "dia=$dia"
 echo "fecha=$fecha"
 echo "hora=$hora"
-echo "zona=$TZ_CIUDAD"
 echo "clima=${clima:-NO_DISPONIBLE}"
