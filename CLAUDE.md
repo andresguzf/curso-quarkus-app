@@ -52,9 +52,11 @@ Todo en `src/main/resources/application.properties` (comentado en español): nom
 ## Available skills
 
 - `saludar` (`.claude/skills/saludar/SKILL.md`): responde al saludo de forma amable con el día, la fecha, la hora y el clima actual de Santiago de Chile, más un pensamiento célebre (p. ej. un proverbio chino) para motivar el día.
+- `frontend-design` (`.claude/skills/frontend-design` → enlace a `.agents/skills/frontend-design`, instalado desde `anthropics/skills` según `skills-lock.json`): pautas de diseño visual para crear o rediseñar interfaces con una dirección estética propia (paleta, tipografía, layout) y no de plantilla.
 - `skill-creator` (skill de usuario, `~/.claude/skills/skill-creator`): crea, mejora y evalúa skills (borrador → casos de prueba → comparación con línea base → revisión → iteración) y optimiza la `description` para que el skill se active cuando corresponde.
 
 ## Skills trigger rules
 
 - **`saludar`**: invócalo con la herramienta Skill cada vez que el usuario salude, en cualquier forma: "hola", "hola, ¿qué tal?", "¿cómo estás?", "buenas", "buenos días", "buenas tardes", "buenas noches", "hey", "qué onda", "saludos", etc. Aplica aunque el saludo venga al inicio de otra petición: primero saluda con el skill y luego atiende la petición. No aplica cuando "hola"/"saludo" es parte del trabajo técnico (un endpoint `/hola`, un "Hola mundo", una clase `SaludoResource`).
+- **`frontend-design`**: invócalo al construir o rediseñar cualquier interfaz web (páginas, componentes React u otro frontend, dashboards, landing pages, estilos/CSS) o cuando se pida mejorar su aspecto visual. No aplica a la API REST ni al backend Quarkus.
 - **`skill-creator`**: invócalo siempre que se pida crear un skill nuevo, o modificar, mejorar, probar o revisar uno existente ("crea un skill…", "haz un skill que…", "mejora el skill X", "revisa este skill"). No escribas el `SKILL.md` a mano sin pasar por él. Los skills del proyecto van en `.claude/skills/<nombre>/`; su workspace de pruebas (`.claude/skills/<nombre>-workspace/`) está en `.gitignore`. Al terminar, registra el skill en `## Available skills` y su regla de activación en esta sección.
