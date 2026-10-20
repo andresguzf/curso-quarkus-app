@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Stack
 
-Quarkus 3.40 LTS (plataforma `3.40.1.1`), Java 25, Maven. Extensiones: `quarkus-rest-jackson` (Quarkus REST + Jackson; incompatible con `quarkus-resteasy` y sus dependientes) y `quarkus-smallrye-openapi` (incluye Swagger UI). No hay extensión de persistencia todavía: para usar `entities`/`repositories` con base de datos hay que añadir una (p. ej. Hibernate ORM con Panache + driver JDBC PosgreSQL).
+Quarkus 3.40 LTS (plataforma `3.40.1.1`), Java 25, Maven. Extensiones: `quarkus-rest-jackson` (Quarkus REST + Jackson; incompatible con `quarkus-resteasy` y sus dependientes) y `quarkus-smallrye-openapi` (incluye Swagger UI). No hay extensión de persistencia todavía: para usar `entities`/`repositories` con base de datos hay que añadir una (p. ej. Hibernate ORM con Panache + driver JDBC PostgreSQL).
 
 Maven no está instalado globalmente: usa siempre el wrapper `./mvnw`.
 
