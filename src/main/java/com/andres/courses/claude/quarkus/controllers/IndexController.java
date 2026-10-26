@@ -54,7 +54,7 @@ public class IndexController {
     }
 
     /**
-     * GET /api/greeting-map → 202 Accepted con el mismo saludo que
+     * GET /api/greeting-map → 200 OK con el mismo saludo que
      * /api/greeting, pero armado con un {@code Map} y en XML:
      * {@code <response><message>Hola mundo Quarkus!</message><user>...</user><date>...</date></response>}
      * <p>
@@ -74,10 +74,30 @@ public class IndexController {
                         "email", "andres@correo.example"),
                 "date", LocalDateTime.now());
 
-        return RestResponse.ResponseBuilder.<Map<String, Object>>create(RestResponse.Status.ACCEPTED)
+        return RestResponse.ResponseBuilder.<Map<String, Object>>create(RestResponse.Status.OK)
                 .header("X-send-message", "Hola que tal este es un mensaje o data oculto en el header del response")
-                .header("Content-Type", "application/xml")
                 .entity(body)
+                .build();
+    }
+
+    /**
+     * GET /api/greeting-xml → 200 OK con el mismo saludo que /api/greeting
+     * (DTO {@link GreetingDto} con su {@link User}), pero en XML:
+     * {@code <GreetingDto><message>...</message><user>...</user><date>...</date></GreetingDto>}
+     * <p>
+     * El elemento raíz toma el nombre del DTO. Igual que /api/greeting-map,
+     * necesita {@code @Produces} para que el XML lo genere
+     * {@code XmlMessageBodyWriter}.
+     */
+    @Path("/greeting-xml")
+    @GET
+    @Produces(MediaType.APPLICATION_XML)
+    public RestResponse<GreetingDto> indexXml() {
+        User user = new User("Andres", 40, "andres@correo.example");
+        GreetingDto greeting = new GreetingDto("Hola mundo Quarkus!", LocalDateTime.now()).withUser(user);
+
+        return RestResponse.ResponseBuilder.<GreetingDto>create(RestResponse.Status.OK)
+                .entity(greeting)
                 .build();
     }
 }

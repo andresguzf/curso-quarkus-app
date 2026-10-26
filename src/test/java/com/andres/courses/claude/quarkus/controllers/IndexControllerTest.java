@@ -31,8 +31,9 @@ import io.restassured.path.xml.XmlPath;
  * <p>
  * Las pruebas se ejecutan en orden: primero {@code /api/greeting}, en el
  * orden de sus campos (estructura, message, user, date); luego
- * {@code /api/user}, {@code /api/greeting-map} y, al final, los casos de
- * error. Ninguna prueba depende del orden de los campos en el JSON.
+ * {@code /api/user}, {@code /api/greeting-map}, {@code /api/greeting-xml}
+ * y, al final, los casos de error. Ninguna prueba depende del orden de los
+ * campos en el JSON o el XML.
  */
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -41,6 +42,7 @@ class IndexControllerTest {
     private static final String GREETING = "/api/greeting";
     private static final String USER = "/api/user";
     private static final String GREETING_MAP = "/api/greeting-map";
+    private static final String GREETING_XML = "/api/greeting-xml";
 
     @Test
     @Order(1)
@@ -121,16 +123,17 @@ class IndexControllerTest {
 
     @Test
     @Order(6)
-    void greetingMapDevuelve202YElXmlCompleto() {
+    void greetingMapDevuelve200YElXmlCompleto() {
         LocalDateTime antes = LocalDateTime.now();
         XmlPath xml = given()
                 .accept(ContentType.XML)
                 .when().get(GREETING_MAP)
                 .then()
-                // status, content type y cabecera propia que fija el ResponseBuilder
-                .statusCode(202)
-                .statusLine(containsString("202 Accepted"))
-                .header("Content-Type", is("application/xml"))
+                // status y cabecera propia que fija el ResponseBuilder; el content type
+                // sale de @Produces (Quarkus le añade ;charset=UTF-8)
+                .statusCode(200)
+                .statusLine(containsString("200 OK"))
+                .contentType(ContentType.XML)
                 .header("X-send-message", is("Hola que tal este es un mensaje o data oculto en el header del response"))
                 // en XML todos los valores llegan como texto
                 .body("response.message", is("Hola mundo Quarkus!"))
@@ -164,6 +167,47 @@ class IndexControllerTest {
 
     @Test
     @Order(8)
+    void greetingXmlDevuelve200YElXmlCompleto() {
+        LocalDateTime antes = LocalDateTime.now();
+        XmlPath xml = given()
+                .accept(ContentType.XML)
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .statusLine(containsString("200 OK"))
+                .contentType(ContentType.XML)
+                // el elemento raíz toma el nombre del DTO; en XML los valores llegan como texto
+                .body("GreetingDto.message", is("Hola mundo Quarkus!"))
+                .body("GreetingDto.user.name", is("Andres"))
+                .body("GreetingDto.user.age", is("40"))
+                .body("GreetingDto.user.email", is("andres@correo.example"))
+                .body("GreetingDto.date", matchesPattern("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?"))
+                .extract().xmlPath();
+        LocalDateTime despues = LocalDateTime.now();
+
+        // exactamente message, user y date en la raíz, y name, age y email en user
+        assertThat(xml.getList("GreetingDto.children().collect { it.name() }", String.class),
+                containsInAnyOrder("message", "user", "date"));
+        assertThat(xml.getList("GreetingDto.user.children().collect { it.name() }", String.class),
+                containsInAnyOrder("name", "age", "email"));
+
+        LocalDateTime date = LocalDateTime.parse(xml.getString("GreetingDto.date"));
+        assertThat(date, greaterThanOrEqualTo(antes));
+        assertThat(date, lessThanOrEqualTo(despues));
+    }
+
+    @Test
+    @Order(9)
+    void greetingXmlSinXmlEnElAcceptDevuelve406() {
+        given()
+                .accept(ContentType.JSON)
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(406);
+    }
+
+    @Test
+    @Order(10)
     void metodoNoPermitidoDevuelve405() {
         given()
                 .when().post(GREETING)
@@ -172,7 +216,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(9)
+    @Order(11)
     void metodoNoPermitidoEnUserDevuelve405() {
         given()
                 .when().post(USER)
@@ -181,7 +225,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(10)
+    @Order(12)
     void metodoNoPermitidoEnGreetingMapDevuelve405() {
         given()
                 .when().post(GREETING_MAP)
@@ -190,7 +234,16 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(11)
+    @Order(13)
+    void metodoNoPermitidoEnGreetingXmlDevuelve405() {
+        given()
+                .when().post(GREETING_XML)
+                .then()
+                .statusCode(405);
+    }
+
+    @Test
+    @Order(14)
     void rutaInexistenteDevuelve404() {
         given()
                 .when().get("/api/no-existe")
