@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Stack
 
-Quarkus 3.40 LTS (plataforma `3.40.1.1`), Java 25, Maven. Extensiones: `quarkus-rest-jackson` (Quarkus REST + Jackson; incompatible con `quarkus-resteasy` y sus dependientes) y `quarkus-smallrye-openapi` (incluye Swagger UI). No hay extensión de persistencia todavía: para usar `entities`/`repositories` con base de datos hay que añadir una (p. ej. Hibernate ORM con Panache + driver JDBC PostgreSQL).
+Quarkus 3.40 LTS (plataforma `3.40.1.1`), Java 25, Maven. Extensiones: `quarkus-rest-jackson` (Quarkus REST + Jackson; incompatible con `quarkus-resteasy` y sus dependientes) y `quarkus-smallrye-openapi` (incluye Swagger UI). Para respuestas XML se usa `jackson-dataformat-xml` (no JAXB, que no serializa `Map` ni `java.time`) con el writer `providers.XmlMessageBodyWriter`; el método debe declarar `@Produces(MediaType.APPLICATION_XML)`, porque sin `@Produces` Quarkus REST lo trata como JSON. No hay extensión de persistencia todavía: para usar `entities`/`repositories` con base de datos hay que añadir una (p. ej. Hibernate ORM con Panache + driver JDBC PostgreSQL).
 
 Maven no está instalado globalmente: usa siempre el wrapper `./mvnw`.
 
@@ -37,6 +37,7 @@ Package base `com.andres.courses.claude.quarkus`, organizado por capas:
 - `services` — lógica de negocio; los controllers delegan aquí
 - `repositories` — acceso a datos
 - `entities` — entidades del dominio persistidas
+- `providers` — `@Provider` de JAX-RS que extienden Quarkus REST (p. ej. serializadores para otros formatos)
 
 Los packages solo contienen `package-info.java` por ahora; no hay código de aplicación. Flujo previsto: controller → service → repository → entity, con models (DTOs) en la frontera HTTP.
 
