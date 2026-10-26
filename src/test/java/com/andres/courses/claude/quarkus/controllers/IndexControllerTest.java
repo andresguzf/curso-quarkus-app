@@ -32,8 +32,8 @@ import io.restassured.path.xml.XmlPath;
  * Las pruebas se ejecutan en orden: primero {@code /api/greeting}, en el
  * orden de sus campos (estructura, message, user, date); luego
  * {@code /api/user}, {@code /api/greeting-map}, {@code /api/greeting-xml}
- * y, al final, los casos de error. Ninguna prueba depende del orden de los
- * campos en el JSON o el XML.
+ * (por header Accept y por query param format) y, al final, los casos de
+ * error. Ninguna prueba depende del orden de los campos en el JSON o el XML.
  */
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -198,16 +198,136 @@ class IndexControllerTest {
 
     @Test
     @Order(9)
-    void greetingXmlSinXmlEnElAcceptDevuelve406() {
-        given()
+    void greetingXmlConAcceptJsonDevuelveElJsonCompleto() {
+        Map<String, Object> json = given()
                 .accept(ContentType.JSON)
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(ContentType.JSON)
+                // el mismo DTO que en XML, ahora con los tipos de JSON (age es número)
+                .body("$", aMapWithSize(3))
+                .body("message", is("Hola mundo Quarkus!"))
+                .body("user", aMapWithSize(3))
+                .body("user.name", is("Andres"))
+                .body("user.age", is(40))
+                .body("user.email", is("andres@correo.example"))
+                .body("date", matchesPattern("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?"))
+                .extract().jsonPath().getMap("$");
+
+        assertThat(json.keySet(), containsInAnyOrder("message", "user", "date"));
+        assertThat(((Map<?, ?>) json.get("user")).keySet(), containsInAnyOrder("name", "age", "email"));
+    }
+
+    @Test
+    @Order(10)
+    void greetingXmlConCualquierAcceptDevuelveJsonPorDefecto() {
+        // */* acepta todo: gana el primer tipo de @Produces (JSON)
+        given()
+                .accept(ContentType.ANY)
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(ContentType.JSON)
+                .body("message", is("Hola mundo Quarkus!"));
+    }
+
+    @Test
+    @Order(11)
+    void greetingXmlRespetaLaPreferenciaDelAccept() {
+        // con pesos q, gana el tipo que el cliente prefiere (XML), no el primero de @Produces
+        given()
+                .accept("application/xml;q=0.9, application/json;q=0.5")
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(containsString("application/xml"))
+                .body("GreetingDto.message", is("Hola mundo Quarkus!"));
+    }
+
+    @Test
+    @Order(12)
+    void greetingXmlConAcceptNoSoportadoDevuelve406() {
+        given()
+                .accept(ContentType.HTML)
                 .when().get(GREETING_XML)
                 .then()
                 .statusCode(406);
     }
 
     @Test
-    @Order(10)
+    @Order(13)
+    void greetingXmlConFormatXmlDevuelveXmlAunqueElAcceptPidaJson() {
+        // el query param manda sobre el header Accept
+        XmlPath xml = given()
+                .accept(ContentType.JSON)
+                .queryParam("format", "xml")
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(ContentType.XML)
+                .body("GreetingDto.message", is("Hola mundo Quarkus!"))
+                .body("GreetingDto.user.name", is("Andres"))
+                .body("GreetingDto.user.age", is("40"))
+                .body("GreetingDto.user.email", is("andres@correo.example"))
+                .extract().xmlPath();
+
+        assertThat(xml.getList("GreetingDto.children().collect { it.name() }", String.class),
+                containsInAnyOrder("message", "user", "date"));
+    }
+
+    @Test
+    @Order(14)
+    void greetingXmlConFormatJsonDevuelveJsonAunqueElAcceptPidaXml() {
+        given()
+                .accept(ContentType.XML)
+                .queryParam("format", "json")
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(ContentType.JSON)
+                .body("$", aMapWithSize(3))
+                .body("message", is("Hola mundo Quarkus!"))
+                .body("user.name", is("Andres"))
+                .body("user.age", is(40))
+                .body("user.email", is("andres@correo.example"));
+    }
+
+    @Test
+    @Order(15)
+    void greetingXmlConFormatEnMayusculasFunciona() {
+        given()
+                .queryParam("format", "XML")
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(ContentType.XML)
+                .body("GreetingDto.message", is("Hola mundo Quarkus!"));
+    }
+
+    @Test
+    @Order(16)
+    void greetingXmlConFormatDesconocidoDevuelve400() {
+        given()
+                .queryParam("format", "yaml")
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    @Order(17)
+    void formatQueElEndpointNoProduceDevuelve406() {
+        // /api/greeting solo produce JSON: ?format=xml se traduce a Accept: application/xml
+        given()
+                .queryParam("format", "xml")
+                .when().get(GREETING)
+                .then()
+                .statusCode(406);
+    }
+
+    @Test
+    @Order(18)
     void metodoNoPermitidoDevuelve405() {
         given()
                 .when().post(GREETING)
@@ -216,7 +336,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(11)
+    @Order(19)
     void metodoNoPermitidoEnUserDevuelve405() {
         given()
                 .when().post(USER)
@@ -225,7 +345,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(12)
+    @Order(20)
     void metodoNoPermitidoEnGreetingMapDevuelve405() {
         given()
                 .when().post(GREETING_MAP)
@@ -234,7 +354,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(13)
+    @Order(21)
     void metodoNoPermitidoEnGreetingXmlDevuelve405() {
         given()
                 .when().post(GREETING_XML)
@@ -243,7 +363,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(14)
+    @Order(22)
     void rutaInexistenteDevuelve404() {
         given()
                 .when().get("/api/no-existe")
