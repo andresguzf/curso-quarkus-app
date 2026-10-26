@@ -1,5 +1,7 @@
 package com.andres.courses.claude.quarkus.controllers;
 
+import static com.andres.courses.claude.quarkus.providers.UserCsvMessageBodyWriter.TEXT_CSV;
+import static com.andres.courses.claude.quarkus.providers.GreetingPdfMessageBodyWriter.APPLICATION_PDF;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.aMapWithSize;
@@ -10,6 +12,8 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.matchesPattern;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -23,6 +27,9 @@ import io.restassured.http.ContentType;
 import io.restassured.path.json.JsonPath;
 import io.restassured.path.xml.XmlPath;
 
+import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.parser.PdfTextExtractor;
+
 /**
  * Pruebas del recurso REST {@link IndexController}.
  * <p>
@@ -32,8 +39,9 @@ import io.restassured.path.xml.XmlPath;
  * Las pruebas se ejecutan en orden: primero {@code /api/greeting}, en el
  * orden de sus campos (estructura, message, user, date); luego
  * {@code /api/user}, {@code /api/greeting-map}, {@code /api/greeting-xml}
- * (por header Accept y por query param format) y, al final, los casos de
- * error. Ninguna prueba depende del orden de los campos en el JSON o el XML.
+ * (JSON, XML, PDF y CSV, por header Accept y por query param format) y, al
+ * final, los casos de error. Ninguna prueba depende del orden de los campos
+ * en el JSON o el XML.
  */
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -328,6 +336,105 @@ class IndexControllerTest {
 
     @Test
     @Order(18)
+    void greetingXmlConAcceptPdfDevuelveElPdfConLaTablaDelUser() throws IOException {
+        byte[] pdf = given()
+                .accept(APPLICATION_PDF)
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(APPLICATION_PDF)
+                .header("Content-Disposition", is("inline; filename=\"greeting.pdf\""))
+                .extract().asByteArray();
+
+        // un PDF real (no el toString del DTO), de una página
+        assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII), is("%PDF-"));
+        String text = pdfText(pdf);
+
+        // cabecera con el mensaje y tabla con los atributos y valores del user
+        assertThat(text, containsString("Hola mundo Quarkus!"));
+        assertThat(text, containsString("Atributo"));
+        assertThat(text, containsString("Valor"));
+        assertThat(text, containsString("Nombre (name)"));
+        assertThat(text, containsString("Andres"));
+        assertThat(text, containsString("Edad (age)"));
+        assertThat(text, containsString("40 años"));
+        assertThat(text, containsString("Correo (email)"));
+        assertThat(text, containsString("andres@correo.example"));
+        // descripción de la clase y pie con la fecha
+        assertThat(text, containsString("¿Quién es User?"));
+        assertThat(text, containsString("Generado el"));
+    }
+
+    @Test
+    @Order(19)
+    void greetingXmlConFormatPdfDevuelvePdfAunqueElAcceptPidaJson() throws IOException {
+        byte[] pdf = given()
+                .accept(ContentType.JSON)
+                .queryParam("format", "pdf")
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(APPLICATION_PDF)
+                .extract().asByteArray();
+
+        assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII), is("%PDF-"));
+        assertThat(pdfText(pdf), containsString("andres@correo.example"));
+    }
+
+    @Test
+    @Order(20)
+    void formatPdfEnUnEndpointSinPdfDevuelve406() {
+        // /api/greeting-map solo produce XML
+        given()
+                .queryParam("format", "pdf")
+                .when().get(GREETING_MAP)
+                .then()
+                .statusCode(406);
+    }
+
+    @Test
+    @Order(21)
+    void greetingXmlConAcceptCsvDevuelveElCsvDelUser() {
+        String csv = given()
+                .accept(TEXT_CSV)
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(TEXT_CSV)
+                .header("Content-Disposition", is("attachment; filename=\"users.csv\""))
+                .extract().asString();
+
+        // solo los campos del User: cabecera y una fila, cada línea terminada en CRLF
+        assertThat(csv, is("name,age,email\r\n"
+                + "Andres,40,andres@correo.example\r\n"));
+    }
+
+    @Test
+    @Order(22)
+    void greetingXmlConFormatCsvDevuelveCsvAunqueElAcceptPidaJson() {
+        given()
+                .accept(ContentType.JSON)
+                .queryParam("format", "csv")
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(TEXT_CSV)
+                .body(is("name,age,email\r\nAndres,40,andres@correo.example\r\n"));
+    }
+
+    @Test
+    @Order(23)
+    void formatCsvEnUnEndpointSinCsvDevuelve406() {
+        // /api/greeting-map solo produce XML
+        given()
+                .queryParam("format", "csv")
+                .when().get(GREETING_MAP)
+                .then()
+                .statusCode(406);
+    }
+
+    @Test
+    @Order(24)
     void metodoNoPermitidoDevuelve405() {
         given()
                 .when().post(GREETING)
@@ -336,7 +443,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(19)
+    @Order(25)
     void metodoNoPermitidoEnUserDevuelve405() {
         given()
                 .when().post(USER)
@@ -345,7 +452,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(20)
+    @Order(26)
     void metodoNoPermitidoEnGreetingMapDevuelve405() {
         given()
                 .when().post(GREETING_MAP)
@@ -354,7 +461,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(21)
+    @Order(27)
     void metodoNoPermitidoEnGreetingXmlDevuelve405() {
         given()
                 .when().post(GREETING_XML)
@@ -363,11 +470,22 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(22)
+    @Order(28)
     void rutaInexistenteDevuelve404() {
         given()
                 .when().get("/api/no-existe")
                 .then()
                 .statusCode(404);
+    }
+
+    /** Texto de la primera (y única) página del PDF, con el extractor de OpenPDF. */
+    private static String pdfText(byte[] pdf) throws IOException {
+        PdfReader reader = new PdfReader(pdf);
+        try {
+            assertThat(reader.getNumberOfPages(), is(1));
+            return new PdfTextExtractor(reader).getTextFromPage(1);
+        } finally {
+            reader.close();
+        }
     }
 }

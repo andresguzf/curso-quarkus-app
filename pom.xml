@@ -14,6 +14,7 @@
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>3.40.1.1</quarkus.platform.version>
+        <quarkus-openpdf.version>3.3.3</quarkus-openpdf.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.5.6</surefire-plugin.version>
     </properties>
@@ -47,6 +48,12 @@
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-xml</artifactId>
+        </dependency>
+        <!-- Generación de PDF con OpenPDF (extensión Quarkiverse: soporte también en modo nativo) -->
+        <dependency>
+            <groupId>io.quarkiverse.openpdf</groupId>
+            <artifactId>quarkus-openpdf</artifactId>
+            <version>${quarkus-openpdf.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>

@@ -11,8 +11,8 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 
 /**
- * Content negotiation por query param: traduce {@code ?format=json|xml} al
- * header {@code Accept} de la petición.
+ * Content negotiation por query param: traduce
+ * {@code ?format=json|xml|pdf|csv} al header {@code Accept} de la petición.
  * <p>
  * Quarkus REST elige el serializador al negociar el {@code Accept} contra el
  * {@code @Produces} del método, antes de ejecutarlo; por eso fijar el tipo
@@ -33,7 +33,9 @@ public class FormatQueryParamFilter implements ContainerRequestFilter {
 
     private static final Map<String, String> FORMATS = Map.of(
             "json", MediaType.APPLICATION_JSON,
-            "xml", MediaType.APPLICATION_XML);
+            "xml", MediaType.APPLICATION_XML,
+            "pdf", GreetingPdfMessageBodyWriter.APPLICATION_PDF,
+            "csv", UserCsvMessageBodyWriter.TEXT_CSV);
 
     @Override
     public void filter(ContainerRequestContext request) {
