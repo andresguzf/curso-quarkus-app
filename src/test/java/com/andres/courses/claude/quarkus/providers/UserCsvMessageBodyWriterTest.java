@@ -2,6 +2,7 @@ package com.andres.courses.claude.quarkus.providers;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -22,7 +23,7 @@ import com.andres.courses.claude.quarkus.models.User;
 /**
  * Pruebas unitarias de {@link UserCsvMessageBodyWriter}: JUnit puro, sin
  * arrancar Quarkus. Cubren el formato del CSV (también con varios usuarios),
- * el escapado RFC 4180 y qué tipos acepta el writer.
+ * el separador configurable, el escapado RFC 4180 y qué tipos acepta el writer.
  */
 class UserCsvMessageBodyWriterTest {
 
@@ -38,7 +39,7 @@ class UserCsvMessageBodyWriterTest {
 
     @Test
     void unUsuarioEsLaCabeceraYUnaFila() {
-        String csv = UserCsvMessageBodyWriter.toCsv(List.of(new User("Andres", 40, "andres@correo.example")));
+        String csv = writer.toCsv(List.of(new User("Andres", 40, "andres@correo.example")));
 
         assertThat(csv, is("name,age,email\r\n"
                 + "Andres,40,andres@correo.example\r\n"));
@@ -46,7 +47,7 @@ class UserCsvMessageBodyWriterTest {
 
     @Test
     void unaListaDeUsuariosEsUnaFilaPorUsuarioEnOrden() {
-        String csv = UserCsvMessageBodyWriter.toCsv(List.of(
+        String csv = writer.toCsv(List.of(
                 new User("Ana", 31, "ana@correo.example"),
                 new User("Bruno", 25, "bruno@correo.example"),
                 new User("Carla", 47, "carla@correo.example")));
@@ -59,12 +60,12 @@ class UserCsvMessageBodyWriterTest {
 
     @Test
     void unaListaVaciaEsSoloLaCabecera() {
-        assertThat(UserCsvMessageBodyWriter.toCsv(List.of()), is("name,age,email\r\n"));
+        assertThat(writer.toCsv(List.of()), is("name,age,email\r\n"));
     }
 
     @Test
     void escapaComasComillasYSaltosDeLinea() {
-        String csv = UserCsvMessageBodyWriter.toCsv(List.of(
+        String csv = writer.toCsv(List.of(
                 new User("Pérez, Ana", 31, "ana@correo.example"),
                 new User("Ana \"la dev\"", 31, "ana@correo.example"),
                 new User("Ana\nPérez", 31, "ana@correo.example")));
@@ -77,8 +78,54 @@ class UserCsvMessageBodyWriterTest {
 
     @Test
     void unValorNuloQuedaVacio() {
-        assertThat(UserCsvMessageBodyWriter.toCsv(List.of(new User("Ana", 31, null))),
+        assertThat(writer.toCsv(List.of(new User("Ana", 31, null))),
                 is("name,age,email\r\nAna,31,\r\n"));
+    }
+
+    @Test
+    void elSeparadorPorDefectoEsLaComa() {
+        assertThat(UserCsvMessageBodyWriter.DEFAULT_SEPARATOR, is(','));
+    }
+
+    @Test
+    void conPuntoYComaSeparaCabeceraYFilasConPuntoYComa() {
+        UserCsvMessageBodyWriter semicolon = new UserCsvMessageBodyWriter(';');
+
+        String csv = semicolon.toCsv(List.of(
+                new User("Ana", 31, "ana@correo.example"),
+                new User("Bruno", 25, "bruno@correo.example")));
+
+        assertThat(csv, is("name;age;email\r\n"
+                + "Ana;31;ana@correo.example\r\n"
+                + "Bruno;25;bruno@correo.example\r\n"));
+    }
+
+    @Test
+    void conPuntoYComaSoloSeEscapanLosValoresQueTienenPuntoYComa() {
+        UserCsvMessageBodyWriter semicolon = new UserCsvMessageBodyWriter(';');
+
+        String csv = semicolon.toCsv(List.of(
+                new User("Pérez, Ana", 31, "ana@correo.example"),
+                new User("Ana; Pérez", 31, "ana@correo.example")));
+
+        // la coma ya no separa columnas, así que no necesita comillas
+        assertThat(csv, is("name;age;email\r\n"
+                + "Pérez, Ana;31;ana@correo.example\r\n"
+                + "\"Ana; Pérez\";31;ana@correo.example\r\n"));
+    }
+
+    @Test
+    void conTabulacionGeneraUnTsv() {
+        String csv = new UserCsvMessageBodyWriter('\t').toCsv(List.of(new User("Ana", 31, "ana@correo.example")));
+
+        assertThat(csv, is("name\tage\temail\r\nAna\t31\tana@correo.example\r\n"));
+    }
+
+    @Test
+    void rechazaSeparadoresReservados() {
+        for (char reserved : new char[] { '"', '\n', '\r' }) {
+            assertThrows(IllegalArgumentException.class, () -> new UserCsvMessageBodyWriter(reserved));
+        }
     }
 
     @Test

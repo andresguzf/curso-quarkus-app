@@ -38,6 +38,12 @@ import com.andres.courses.claude.quarkus.models.User;
  * <li>{@link GreetingDto}: la fila de su {@code user}; el mensaje y la fecha
  * no van en el CSV. Sin usuario, solo la cabecera</li>
  * </ul>
+ * El separador de columnas es configurable: por defecto es la coma
+ * ({@value #DEFAULT_SEPARATOR}); para cambiarlo en toda la API basta con
+ * modificar {@link #DEFAULT_SEPARATOR} (p. ej. a {@code ';'}, el que espera
+ * Excel en configuraciones regionales en español), y el constructor
+ * {@link #UserCsvMessageBodyWriter(char)} permite usar otro en una instancia.
+ * <p>
  * Los valores se escapan según RFC 4180 y las líneas terminan en CRLF. No
  * necesita dependencias: es texto plano.
  * <p>
@@ -52,9 +58,32 @@ public class UserCsvMessageBodyWriter implements MessageBodyWriter<Object> {
     /** jakarta.ws.rs.core.MediaType no trae una constante para CSV. */
     public static final String TEXT_CSV = "text/csv";
 
-    static final String HEADER = "name,age,email";
+    /** Separador de columnas que usa Quarkus al crear el provider. */
+    public static final char DEFAULT_SEPARATOR = ';';
+
+    /** Columnas del CSV: los campos de {@link User}, en este orden. */
+    static final List<String> COLUMNS = List.of("name", "age", "email");
 
     private static final String CRLF = "\r\n";
+
+    private final String separator;
+
+    /** Con el separador por defecto ({@value #DEFAULT_SEPARATOR}). Es el que usa Quarkus. */
+    public UserCsvMessageBodyWriter() {
+        this(DEFAULT_SEPARATOR);
+    }
+
+    /**
+     * @param separator separador de columnas; no puede ser una comilla doble
+     *                  ni un salto de línea, que el CSV reserva para escapar
+     *                  valores y separar filas
+     */
+    public UserCsvMessageBodyWriter(char separator) {
+        if (separator == '"' || separator == '\n' || separator == '\r') {
+            throw new IllegalArgumentException("Separador de CSV no válido: " + separator);
+        }
+        this.separator = String.valueOf(separator);
+    }
 
     @Override
     public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
@@ -88,28 +117,28 @@ public class UserCsvMessageBodyWriter implements MessageBodyWriter<Object> {
     }
 
     /** CSV completo: cabecera + una fila por usuario. Una lista vacía deja solo la cabecera. */
-    static String toCsv(List<User> users) {
-        return Stream.concat(Stream.of(HEADER), users.stream().map(UserCsvMessageBodyWriter::row))
+    String toCsv(List<User> users) {
+        return Stream.concat(Stream.of(String.join(separator, COLUMNS)), users.stream().map(this::row))
                 .map(line -> line + CRLF)
                 .collect(Collectors.joining());
     }
 
-    private static String row(User user) {
-        return String.join(",",
+    private String row(User user) {
+        return String.join(separator,
                 escape(user.getName()),
                 String.valueOf(user.getAge()),
                 escape(user.getEmail()));
     }
 
     /**
-     * RFC 4180: si el valor tiene coma, comillas o saltos de línea, va entre
-     * comillas dobles y cada comilla se duplica. Un valor nulo queda vacío.
+     * RFC 4180: si el valor tiene el separador, comillas o saltos de línea, va
+     * entre comillas dobles y cada comilla se duplica. Un valor nulo queda vacío.
      */
-    static String escape(String value) {
+    private String escape(String value) {
         if (value == null) {
             return "";
         }
-        if (value.contains(",") || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
+        if (value.contains(separator) || value.contains("\"") || value.contains("\n") || value.contains("\r")) {
             return "\"" + value.replace("\"", "\"\"") + "\"";
         }
         return value;
