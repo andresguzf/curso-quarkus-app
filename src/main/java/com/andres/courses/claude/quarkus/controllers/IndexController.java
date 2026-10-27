@@ -21,6 +21,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 
+import org.jboss.resteasy.reactive.RestPath;
 import org.jboss.resteasy.reactive.RestQuery;
 import org.jboss.resteasy.reactive.RestResponse;
 import org.jboss.resteasy.reactive.Separator;
@@ -53,7 +54,7 @@ public class IndexController {
     public static final int NAME_MAX_LENGTH = 8;
 
     /** Rango válido del parámetro {@code age} de {@code GET /api/hello}. */
-    public static final int AGE_MIN = 0;
+    public static final int AGE_MIN = 18;
     public static final int AGE_MAX = 120;
 
     /** Máximo de categorías del parámetro {@code categories} de {@code GET /api/hello}. */
@@ -339,6 +340,53 @@ public class IndexController {
         ArrayNode categoryArray = body.putArray("categories");
         categories.forEach(categoryArray::add);
         body.put("total", categories.size());
+
+        return RestResponse.ResponseBuilder.<ObjectNode>create(RestResponse.Status.OK)
+                .entity(body)
+                .build();
+    }
+
+    /**
+     * GET /api/hello-path/Ana/40 → 200 OK con un saludo para el nombre y la
+     * edad que vienen en la ruta, en JSON o XML:
+     * <pre>
+     * {"message": "Hola, Ana!", "name": "Ana", "age": 40}
+     * &lt;response&gt;&lt;message&gt;Hola, Ana!&lt;/message&gt;&lt;name&gt;Ana&lt;/name&gt;&lt;age&gt;40&lt;/age&gt;&lt;/response&gt;
+     * </pre>
+     * {@code {name}} y {@code {age}} en el {@code @Path} son variables de la
+     * ruta (path params) y Quarkus REST inyecta cada una en el argumento con
+     * el mismo nombre: {@code name} sin anotación y {@code age} con
+     * {@code @RestPath}; ambas formas equivalen a {@code @PathParam("name")} y
+     * {@code @PathParam("age")}. Son obligatorias por la propia ruta: si falta
+     * alguna ({@code /api/hello-path} o {@code /api/hello-path/Ana}) ninguna
+     * ruta coincide y Quarkus responde 404.
+     * <ul>
+     * <li>{@code name}: entre 3 y {@value #NAME_MAX_LENGTH} caracteres
+     * ({@code @Size})</li>
+     * <li>{@code age}: número entero entre {@value #AGE_MIN} y
+     * {@value #AGE_MAX} ({@code @Min}/{@code @Max}). Si no es un número
+     * (p. ej. {@code /api/hello-path/Ana/abc}) Quarkus no puede convertirlo y,
+     * como manda JAX-RS para un path param, responde 404</li>
+     * </ul>
+     * Si no cumple → 400 Bad Request con el detalle de la validación
+     * ({@code helloPath.name}, {@code helloPath.age}).
+     */
+    @Path("/hello-path/{name}/{age}")
+    @GET
+    @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+    public RestResponse<ObjectNode> helloPath(
+            @Size(min = 3, max = NAME_MAX_LENGTH, message = "El path param name debe tener entre {min} y {max} caracteres")
+            String name,
+            // int y no Integer: un path param siempre viene, nunca es null
+            @RestPath
+            @Min(value = AGE_MIN, message = "El path param age debe ser mayor o igual a {value}")
+            @Max(value = AGE_MAX, message = "El path param age debe ser menor o igual a {value}")
+            int age) {
+
+        ObjectNode body = JsonNodeFactory.instance.objectNode()
+                .put("message", "Hola, " + name + "!")
+                .put("name", name)
+                .put("age", age);
 
         return RestResponse.ResponseBuilder.<ObjectNode>create(RestResponse.Status.OK)
                 .entity(body)

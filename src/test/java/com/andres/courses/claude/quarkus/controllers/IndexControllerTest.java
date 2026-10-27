@@ -65,8 +65,8 @@ import com.andres.courses.claude.quarkus.providers.UserCsvMessageBodyWriter;
  * orden de sus campos (estructura, message, user, date); luego
  * {@code /api/user}, {@code /api/greeting-map}, {@code /api/greeting-xml}
  * (JSON, XML, PDF, CSV y Excel, por header Accept y por query param
- * format), {@code /api/headers}, {@code /api/hello}, {@code /api/categories}
- * y, al final, los casos de error. Ninguna prueba depende del orden de
+ * format), {@code /api/headers}, {@code /api/hello}, {@code /api/categories},
+ * {@code /api/hello-path} y, al final, los casos de error. Ninguna prueba depende del orden de
  * los campos en el JSON o el XML.
  */
 @QuarkusTest
@@ -80,6 +80,9 @@ class IndexControllerTest {
     private static final String HEADERS = "/api/headers";
     private static final String HELLO = "/api/hello";
     private static final String CATEGORIES_PATH = "/api/categories";
+    private static final String HELLO_PATH_BASE = "/api/hello-path";
+    /** Ruta con las variables {name} y {age}: los valores los pone {@code pathParam(...)}. */
+    private static final String HELLO_PATH = HELLO_PATH_BASE + "/{name}/{age}";
 
     /** birthDate válida (pasada, ISO-8601) para las pruebas de /api/hello. */
     private static final String BIRTH_DATE = "1985-10-26";
@@ -974,7 +977,7 @@ class IndexControllerTest {
         given()
                 .queryParam("categories", CATEGORIES)
                 .queryParam("name", "Ana")
-                .queryParam("age", 0)
+                .queryParam("age", AGE_MIN)
                 .queryParam("birthDate", yesterday)
                 .when().get(HELLO)
                 .then()
@@ -1371,6 +1374,214 @@ class IndexControllerTest {
 
     @Test
     @Order(81)
+    void helloPathSaludaAlNameDeLaRutaEnJson() {
+        given()
+                .pathParam("name", "Ana")
+                .pathParam("age", 40)
+                .accept("application/json")
+                .when().get(HELLO_PATH)
+                .then()
+                .statusCode(200)
+                .contentType(ContentType.JSON)
+                // exactamente message, name y age
+                .body("$", aMapWithSize(3))
+                .body("message", is("Hola, Ana!"))
+                .body("name", is("Ana"))
+                // age es un número en el JSON, no un texto
+                .body("age", is(40));
+    }
+
+    @Test
+    @Order(82)
+    void helloPathConAcceptXmlSaludaEnXml() {
+        XmlPath xml = given()
+                .pathParam("name", "Ana")
+                .pathParam("age", 40)
+                .accept("application/xml")
+                .when().get(HELLO_PATH)
+                .then()
+                .statusCode(200)
+                .contentType(ContentType.XML)
+                .body("response.message", is("Hola, Ana!"))
+                .body("response.name", is("Ana"))
+                .body("response.age", is("40"))
+                .extract().xmlPath();
+
+        assertThat(xml.getList("response.children().collect { it.name() }", String.class),
+                containsInAnyOrder("message", "name", "age"));
+    }
+
+    @Test
+    @Order(83)
+    void helloPathDecodificaElNameDeLaRuta() {
+        // RestAssured envía "José Gil" codificado (Jos%C3%A9%20Gil) y Quarkus lo decodifica
+        given()
+                .pathParam("name", "José Gil")
+                .pathParam("age", 40)
+                .when().get(HELLO_PATH)
+                .then()
+                .statusCode(200)
+                .body("message", is("Hola, José Gil!"))
+                .body("name", is("José Gil"));
+    }
+
+    @Test
+    @Order(84)
+    void helloPathConNameDemasiadoCortoDevuelve400() {
+        given()
+                .pathParam("name", "Al")
+                .pathParam("age", 40)
+                .accept("application/json")
+                .when().get(HELLO_PATH)
+                .then()
+                .statusCode(400)
+                .contentType(ContentType.JSON)
+                .body("violations", hasSize(1))
+                .body("violations[0].field", is("helloPath.name"))
+                .body("violations[0].message", is("El path param name debe tener entre 3 y " + NAME_MAX_LENGTH + " caracteres"));
+    }
+
+    @Test
+    @Order(85)
+    void helloPathConNameDemasiadoLargoDevuelve400() {
+        given()
+                .pathParam("name", "a".repeat(NAME_MAX_LENGTH + 1))
+                .pathParam("age", 40)
+                .accept("application/json")
+                .when().get(HELLO_PATH)
+                .then()
+                .statusCode(400)
+                .contentType(ContentType.JSON)
+                .body("violations", hasSize(1))
+                .body("violations[0].field", is("helloPath.name"))
+                .body("violations[0].message", is("El path param name debe tener entre 3 y " + NAME_MAX_LENGTH + " caracteres"));
+    }
+
+    @Test
+    @Order(86)
+    void helloPathConNameDelLargoMinimoYMaximoSaluda() {
+        for (String name : new String[] { "Ana", "a".repeat(NAME_MAX_LENGTH) }) {
+            given()
+                    .pathParam("name", name)
+                    .pathParam("age", 40)
+                    .when().get(HELLO_PATH)
+                    .then()
+                    .statusCode(200)
+                    .body("name", is(name));
+        }
+    }
+
+    @Test
+    @Order(87)
+    void helloPathSinNameDevuelve404() {
+        // sin las variables de la ruta ninguna ruta coincide
+        given()
+                .when().get(HELLO_PATH_BASE)
+                .then()
+                .statusCode(404);
+        given()
+                .when().get(HELLO_PATH_BASE + "/")
+                .then()
+                .statusCode(404);
+    }
+
+    @Test
+    @Order(88)
+    void helloPathSinAgeDevuelve404() {
+        // /api/hello-path/Ana: falta {age}, ninguna ruta coincide
+        given()
+                .when().get(HELLO_PATH_BASE + "/Ana")
+                .then()
+                .statusCode(404);
+        given()
+                .when().get(HELLO_PATH_BASE + "/Ana/")
+                .then()
+                .statusCode(404);
+    }
+
+    @Test
+    @Order(89)
+    void helloPathConAgeFueraDeRangoDevuelve400() {
+        given()
+                .pathParam("name", "Ana")
+                .pathParam("age", AGE_MIN - 1)
+                .accept("application/json")
+                .when().get(HELLO_PATH)
+                .then()
+                .statusCode(400)
+                .contentType(ContentType.JSON)
+                .body("violations", hasSize(1))
+                .body("violations[0].field", is("helloPath.age"))
+                .body("violations[0].message", is("El path param age debe ser mayor o igual a " + AGE_MIN));
+        given()
+                .pathParam("name", "Ana")
+                .pathParam("age", AGE_MAX + 1)
+                .accept("application/json")
+                .when().get(HELLO_PATH)
+                .then()
+                .statusCode(400)
+                .contentType(ContentType.JSON)
+                .body("violations", hasSize(1))
+                .body("violations[0].field", is("helloPath.age"))
+                .body("violations[0].message", is("El path param age debe ser menor o igual a " + AGE_MAX));
+    }
+
+    @Test
+    @Order(90)
+    void helloPathConAgeEnLosLimitesSaluda() {
+        for (int age : new int[] { AGE_MIN, AGE_MAX }) {
+            given()
+                    .pathParam("name", "Ana")
+                    .pathParam("age", age)
+                    .when().get(HELLO_PATH)
+                    .then()
+                    .statusCode(200)
+                    .body("age", is(age));
+        }
+    }
+
+    @Test
+    @Order(91)
+    void helloPathConAgeQueNoEsUnNumeroEnteroDevuelve404() {
+        // Quarkus no puede convertir el texto a int: JAX-RS responde 404 para un path param
+        for (String age : new String[] { "abc", "40.5", "" + Long.MAX_VALUE }) {
+            given()
+                    .pathParam("name", "Ana")
+                    .pathParam("age", age)
+                    .when().get(HELLO_PATH)
+                    .then()
+                    .statusCode(404);
+        }
+    }
+
+    @Test
+    @Order(92)
+    void helloPathConNameYAgeInvalidosDevuelveAmbasViolaciones() {
+        given()
+                .pathParam("name", "Al")
+                .pathParam("age", AGE_MAX + 1)
+                .accept("application/json")
+                .when().get(HELLO_PATH)
+                .then()
+                .statusCode(400)
+                .body("violations", hasSize(2))
+                .body("violations.field", containsInAnyOrder("helloPath.name", "helloPath.age"));
+    }
+
+    @Test
+    @Order(93)
+    void helloPathConAcceptNoSoportadoDevuelve406() {
+        given()
+                .pathParam("name", "Ana")
+                .pathParam("age", 40)
+                .accept(ContentType.HTML)
+                .when().get(HELLO_PATH)
+                .then()
+                .statusCode(406);
+    }
+
+    @Test
+    @Order(94)
     void metodoNoPermitidoDevuelve405() {
         given()
                 .when().post(GREETING)
@@ -1379,7 +1590,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(82)
+    @Order(95)
     void metodoNoPermitidoEnUserDevuelve405() {
         given()
                 .when().post(USER)
@@ -1388,7 +1599,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(83)
+    @Order(96)
     void metodoNoPermitidoEnGreetingMapDevuelve405() {
         given()
                 .when().post(GREETING_MAP)
@@ -1397,7 +1608,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(84)
+    @Order(97)
     void metodoNoPermitidoEnGreetingXmlDevuelve405() {
         given()
                 .when().post(GREETING_XML)
@@ -1406,7 +1617,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(85)
+    @Order(98)
     void metodoNoPermitidoEnHeadersDevuelve405() {
         given()
                 .header(CLIENT_ID_HEADER, "app-movil")
@@ -1416,7 +1627,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(86)
+    @Order(99)
     void metodoNoPermitidoEnHelloDevuelve405() {
         given()
                 .when().post(HELLO)
@@ -1425,7 +1636,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(87)
+    @Order(100)
     void metodoNoPermitidoEnCategoriesDevuelve405() {
         given()
                 .when().post(CATEGORIES_PATH)
@@ -1434,7 +1645,18 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(88)
+    @Order(101)
+    void metodoNoPermitidoEnHelloPathDevuelve405() {
+        given()
+                .pathParam("name", "Ana")
+                .pathParam("age", 40)
+                .when().post(HELLO_PATH)
+                .then()
+                .statusCode(405);
+    }
+
+    @Test
+    @Order(102)
     void rutaInexistenteDevuelve404() {
         given()
                 .when().get("/api/no-existe")
