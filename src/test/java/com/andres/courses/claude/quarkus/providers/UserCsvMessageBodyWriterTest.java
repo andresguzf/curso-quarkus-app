@@ -27,7 +27,11 @@ import com.andres.courses.claude.quarkus.models.User;
  */
 class UserCsvMessageBodyWriterTest {
 
-    private final UserCsvMessageBodyWriter writer = new UserCsvMessageBodyWriter();
+    /**
+     * Con coma explícita: las pruebas de formato no dependen de
+     * {@link UserCsvMessageBodyWriter#DEFAULT_SEPARATOR}, que se puede cambiar.
+     */
+    private final UserCsvMessageBodyWriter writer = new UserCsvMessageBodyWriter(',');
 
     // tipos genéricos reales para probar isWriteable con colecciones
     @SuppressWarnings("unused")
@@ -83,8 +87,14 @@ class UserCsvMessageBodyWriterTest {
     }
 
     @Test
-    void elSeparadorPorDefectoEsLaComa() {
-        assertThat(UserCsvMessageBodyWriter.DEFAULT_SEPARATOR, is(','));
+    void elConstructorSinArgumentosUsaElSeparadorPorDefecto() {
+        // es el constructor que usa Quarkus al crear el provider
+        String separator = String.valueOf(UserCsvMessageBodyWriter.DEFAULT_SEPARATOR);
+
+        String csv = new UserCsvMessageBodyWriter().toCsv(List.of(new User("Ana", 31, "ana@correo.example")));
+
+        assertThat(csv, is(String.join(separator, "name", "age", "email") + "\r\n"
+                + String.join(separator, "Ana", "31", "ana@correo.example") + "\r\n"));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.andres.courses.claude.quarkus.controllers;
 
 import static com.andres.courses.claude.quarkus.providers.UserCsvMessageBodyWriter.TEXT_CSV;
+import static com.andres.courses.claude.quarkus.providers.UserExcelMessageBodyWriter.APPLICATION_XLSX;
 import static com.andres.courses.claude.quarkus.providers.GreetingPdfMessageBodyWriter.APPLICATION_PDF;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -12,6 +13,7 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.matchesPattern;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -27,8 +29,16 @@ import io.restassured.http.ContentType;
 import io.restassured.path.json.JsonPath;
 import io.restassured.path.xml.XmlPath;
 
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
 import com.lowagie.text.pdf.PdfReader;
 import com.lowagie.text.pdf.parser.PdfTextExtractor;
+
+import com.andres.courses.claude.quarkus.providers.UserCsvMessageBodyWriter;
 
 /**
  * Pruebas del recurso REST {@link IndexController}.
@@ -39,7 +49,7 @@ import com.lowagie.text.pdf.parser.PdfTextExtractor;
  * Las pruebas se ejecutan en orden: primero {@code /api/greeting}, en el
  * orden de sus campos (estructura, message, user, date); luego
  * {@code /api/user}, {@code /api/greeting-map}, {@code /api/greeting-xml}
- * (JSON, XML, PDF y CSV, por header Accept y por query param format) y, al
+ * (JSON, XML, PDF, CSV y Excel, por header Accept y por query param format) y, al
  * final, los casos de error. Ninguna prueba depende del orden de los campos
  * en el JSON o el XML.
  */
@@ -51,6 +61,10 @@ class IndexControllerTest {
     private static final String USER = "/api/user";
     private static final String GREETING_MAP = "/api/greeting-map";
     private static final String GREETING_XML = "/api/greeting-xml";
+
+    /** CSV del user del saludo, con el separador configurado en UserCsvMessageBodyWriter. */
+    private static final String EXPECTED_CSV = csvLine("name", "age", "email")
+            + csvLine("Andres", "40", "andres@correo.example");
 
     @Test
     @Order(1)
@@ -405,8 +419,7 @@ class IndexControllerTest {
                 .extract().asString();
 
         // solo los campos del User: cabecera y una fila, cada línea terminada en CRLF
-        assertThat(csv, is("name,age,email\r\n"
-                + "Andres,40,andres@correo.example\r\n"));
+        assertThat(csv, is(EXPECTED_CSV));
     }
 
     @Test
@@ -419,7 +432,7 @@ class IndexControllerTest {
                 .then()
                 .statusCode(200)
                 .contentType(TEXT_CSV)
-                .body(is("name,age,email\r\nAndres,40,andres@correo.example\r\n"));
+                .body(is(EXPECTED_CSV));
     }
 
     @Test
@@ -435,6 +448,69 @@ class IndexControllerTest {
 
     @Test
     @Order(24)
+    void greetingXmlConAcceptXlsxDevuelveElExcelDelUser() throws IOException {
+        byte[] xlsx = given()
+                .accept(APPLICATION_XLSX)
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(containsString(APPLICATION_XLSX))
+                .header("Content-Disposition", is("attachment; filename=\"users.xlsx\""))
+                .extract().asByteArray();
+
+        try (Workbook workbook = new XSSFWorkbook(new ByteArrayInputStream(xlsx))) {
+            // una hoja, solo con los campos del User: cabecera y una fila
+            assertThat(workbook.getNumberOfSheets(), is(1));
+            Sheet sheet = workbook.getSheetAt(0);
+            assertThat(sheet.getSheetName(), is("Usuarios"));
+            assertThat(sheet.getLastRowNum(), is(1));
+
+            Row header = sheet.getRow(0);
+            assertThat(header.getCell(0).getStringCellValue(), is("name"));
+            assertThat(header.getCell(1).getStringCellValue(), is("age"));
+            assertThat(header.getCell(2).getStringCellValue(), is("email"));
+            assertThat(header.getLastCellNum(), is((short) 3));
+
+            Row user = sheet.getRow(1);
+            assertThat(user.getCell(0).getStringCellValue(), is("Andres"));
+            // la edad es numérica, no texto
+            assertThat(user.getCell(1).getCellType(), is(CellType.NUMERIC));
+            assertThat(user.getCell(1).getNumericCellValue(), is(40.0));
+            assertThat(user.getCell(2).getStringCellValue(), is("andres@correo.example"));
+        }
+    }
+
+    @Test
+    @Order(25)
+    void greetingXmlConFormatExcelDevuelveXlsxAunqueElAcceptPidaJson() throws IOException {
+        byte[] xlsx = given()
+                .accept(ContentType.JSON)
+                .queryParam("format", "excel")
+                .when().get(GREETING_XML)
+                .then()
+                .statusCode(200)
+                .contentType(containsString(APPLICATION_XLSX))
+                .extract().asByteArray();
+
+        try (Workbook workbook = new XSSFWorkbook(new ByteArrayInputStream(xlsx))) {
+            assertThat(workbook.getSheetAt(0).getRow(1).getCell(2).getStringCellValue(),
+                    is("andres@correo.example"));
+        }
+    }
+
+    @Test
+    @Order(26)
+    void formatXlsxEnUnEndpointSinExcelDevuelve406() {
+        // /api/greeting-map solo produce XML
+        given()
+                .queryParam("format", "xlsx")
+                .when().get(GREETING_MAP)
+                .then()
+                .statusCode(406);
+    }
+
+    @Test
+    @Order(27)
     void metodoNoPermitidoDevuelve405() {
         given()
                 .when().post(GREETING)
@@ -443,7 +519,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(25)
+    @Order(28)
     void metodoNoPermitidoEnUserDevuelve405() {
         given()
                 .when().post(USER)
@@ -452,7 +528,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(26)
+    @Order(29)
     void metodoNoPermitidoEnGreetingMapDevuelve405() {
         given()
                 .when().post(GREETING_MAP)
@@ -461,7 +537,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(27)
+    @Order(30)
     void metodoNoPermitidoEnGreetingXmlDevuelve405() {
         given()
                 .when().post(GREETING_XML)
@@ -470,12 +546,16 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(28)
+    @Order(31)
     void rutaInexistenteDevuelve404() {
         given()
                 .when().get("/api/no-existe")
                 .then()
                 .statusCode(404);
+    }
+
+    private static String csvLine(String... values) {
+        return String.join(String.valueOf(UserCsvMessageBodyWriter.DEFAULT_SEPARATOR), values) + "\r\n";
     }
 
     /** Texto de la primera (y única) página del PDF, con el extractor de OpenPDF. */

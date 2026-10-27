@@ -16,6 +16,7 @@ import com.andres.courses.claude.quarkus.models.User;
 import com.andres.courses.claude.quarkus.providers.FormatQueryParamFilter;
 import com.andres.courses.claude.quarkus.providers.GreetingPdfMessageBodyWriter;
 import com.andres.courses.claude.quarkus.providers.UserCsvMessageBodyWriter;
+import com.andres.courses.claude.quarkus.providers.UserExcelMessageBodyWriter;
 
 /**
  * Controller de bienvenida: responde en la raíz de la API.
@@ -85,9 +86,9 @@ public class IndexController {
     }
 
     /**
-     * GET /api/greeting-xml?format=json|xml|pdf|csv → 200 OK con el mismo
+     * GET /api/greeting-xml?format=json|xml|pdf|csv|xlsx → 200 OK con el mismo
      * saludo que /api/greeting (DTO {@link GreetingDto} con su {@link User}),
-     * en JSON, XML, PDF o CSV según el query param {@code format}:
+     * en JSON, XML, PDF, CSV o Excel según el query param {@code format}:
      * <ul>
      * <li>{@code ?format=json} → JSON (lo genera Jackson)</li>
      * <li>{@code ?format=xml} → XML con raíz {@code <GreetingDto>} (lo genera
@@ -98,10 +99,14 @@ public class IndexController {
      * cabecera {@code name,age,email} y una fila (lo genera
      * {@code UserCsvMessageBodyWriter}, que también sirve para una lista de
      * usuarios)</li>
+     * <li>{@code ?format=xlsx} (o {@code excel}) → Excel con el mismo diseño
+     * que el CSV: cabecera y una fila por usuario (lo genera
+     * {@code UserExcelMessageBodyWriter} con Apache POI)</li>
      * <li>otro valor (p. ej. {@code ?format=yaml}) → 400 Bad Request</li>
      * <li>sin {@code format} → content negotiation por el header
-     * {@code Accept}: JSON, XML, PDF o CSV según lo pida el cliente, JSON si
-     * acepta cualquiera ({@code *}{@code /*}) y 406 si pide otro tipo</li>
+     * {@code Accept}: JSON, XML, PDF, CSV o Excel según lo pida el cliente,
+     * JSON si acepta cualquiera ({@code *}{@code /*}) y 406 si pide otro
+     * tipo</li>
      * </ul>
      * Si viene {@code format}, manda sobre el {@code Accept}: lo traduce
      * {@code FormatQueryParamFilter} antes de la negociación, porque un
@@ -109,14 +114,15 @@ public class IndexController {
      * y no el serializador. Los tipos de {@code @Produces} son los que
      * Quarkus negocia.
      *
-     * @param format {@code json}, {@code xml}, {@code pdf} o {@code csv}; lo
-     *               procesa el filtro y se declara aquí para que aparezca en
-     *               Swagger/OpenAPI
+     * @param format {@code json}, {@code xml}, {@code pdf}, {@code csv} o
+     *               {@code xlsx}; lo procesa el filtro y se declara aquí para
+     *               que aparezca en Swagger/OpenAPI
      */
     @Path("/greeting-xml")
     @GET
     @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML,
-            GreetingPdfMessageBodyWriter.APPLICATION_PDF, UserCsvMessageBodyWriter.TEXT_CSV })
+            GreetingPdfMessageBodyWriter.APPLICATION_PDF, UserCsvMessageBodyWriter.TEXT_CSV,
+            UserExcelMessageBodyWriter.APPLICATION_XLSX })
     public RestResponse<GreetingDto> indexXml(@QueryParam(FormatQueryParamFilter.FORMAT) String format) {
         User user = new User("Andres", 40, "andres@correo.example");
         GreetingDto greeting = new GreetingDto("Hola mundo Quarkus!", LocalDateTime.now()).withUser(user);

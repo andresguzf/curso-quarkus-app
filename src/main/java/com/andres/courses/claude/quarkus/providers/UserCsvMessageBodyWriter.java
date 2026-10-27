@@ -26,8 +26,8 @@ import com.andres.courses.claude.quarkus.models.User;
  * los campos de {@link User} y una fila por usuario.
  *
  * <pre>
- * name,age,email
- * Andres,40,andres@correo.example
+ * name;age;email
+ * Andres;40;andres@correo.example
  * </pre>
  *
  * Acepta tres tipos de respuesta:
@@ -38,11 +38,12 @@ import com.andres.courses.claude.quarkus.models.User;
  * <li>{@link GreetingDto}: la fila de su {@code user}; el mensaje y la fecha
  * no van en el CSV. Sin usuario, solo la cabecera</li>
  * </ul>
- * El separador de columnas es configurable: por defecto es la coma
- * ({@value #DEFAULT_SEPARATOR}); para cambiarlo en toda la API basta con
- * modificar {@link #DEFAULT_SEPARATOR} (p. ej. a {@code ';'}, el que espera
- * Excel en configuraciones regionales en español), y el constructor
- * {@link #UserCsvMessageBodyWriter(char)} permite usar otro en una instancia.
+ * El separador de columnas es configurable: es {@value #DEFAULT_SEPARATOR}
+ * (punto y coma, el que espera Excel en configuraciones regionales en
+ * español); para cambiarlo en toda la API basta con modificar
+ * {@link #DEFAULT_SEPARATOR} (p. ej. a {@code ','}, el del estándar
+ * RFC 4180), y el constructor {@link #UserCsvMessageBodyWriter(char)} permite
+ * usar otro en una instancia.
  * <p>
  * Los valores se escapan según RFC 4180 y las líneas terminan en CRLF. No
  * necesita dependencias: es texto plano.

@@ -12,7 +12,8 @@ import jakarta.ws.rs.ext.Provider;
 
 /**
  * Content negotiation por query param: traduce
- * {@code ?format=json|xml|pdf|csv} al header {@code Accept} de la petición.
+ * {@code ?format=json|xml|pdf|csv|xlsx} ({@code excel} es un alias de
+ * {@code xlsx}) al header {@code Accept} de la petición.
  * <p>
  * Quarkus REST elige el serializador al negociar el {@code Accept} contra el
  * {@code @Produces} del método, antes de ejecutarlo; por eso fijar el tipo
@@ -35,7 +36,9 @@ public class FormatQueryParamFilter implements ContainerRequestFilter {
             "json", MediaType.APPLICATION_JSON,
             "xml", MediaType.APPLICATION_XML,
             "pdf", GreetingPdfMessageBodyWriter.APPLICATION_PDF,
-            "csv", UserCsvMessageBodyWriter.TEXT_CSV);
+            "csv", UserCsvMessageBodyWriter.TEXT_CSV,
+            "xlsx", UserExcelMessageBodyWriter.APPLICATION_XLSX,
+            "excel", UserExcelMessageBodyWriter.APPLICATION_XLSX);
 
     @Override
     public void filter(ContainerRequestContext request) {
