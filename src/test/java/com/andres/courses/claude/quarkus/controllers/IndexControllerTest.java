@@ -3,6 +3,9 @@ package com.andres.courses.claude.quarkus.controllers;
 import static com.andres.courses.claude.quarkus.providers.UserCsvMessageBodyWriter.TEXT_CSV;
 import static com.andres.courses.claude.quarkus.providers.UserExcelMessageBodyWriter.APPLICATION_XLSX;
 import static com.andres.courses.claude.quarkus.providers.GreetingPdfMessageBodyWriter.APPLICATION_PDF;
+import static com.andres.courses.claude.quarkus.controllers.IndexController.CATEGORIES_MAX;
+import static com.andres.courses.claude.quarkus.controllers.IndexController.CATEGORY_MAX_LENGTH;
+import static com.andres.courses.claude.quarkus.controllers.IndexController.CATEGORY_MIN_LENGTH;
 import static com.andres.courses.claude.quarkus.controllers.IndexController.CLIENT_ID_HEADER;
 import static com.andres.courses.claude.quarkus.controllers.IndexController.CLIENT_VERSION_HEADER;
 import static com.andres.courses.claude.quarkus.controllers.IndexController.AGE_MAX;
@@ -11,6 +14,7 @@ import static com.andres.courses.claude.quarkus.controllers.IndexController.NAME
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.aMapWithSize;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -27,6 +31,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.Map;
 
 import org.junit.jupiter.api.MethodOrderer;
@@ -60,8 +65,9 @@ import com.andres.courses.claude.quarkus.providers.UserCsvMessageBodyWriter;
  * orden de sus campos (estructura, message, user, date); luego
  * {@code /api/user}, {@code /api/greeting-map}, {@code /api/greeting-xml}
  * (JSON, XML, PDF, CSV y Excel, por header Accept y por query param
- * format), {@code /api/headers}, {@code /api/hello} y, al final, los casos
- * de error. Ninguna prueba depende del orden de los campos en el JSON o el XML.
+ * format), {@code /api/headers}, {@code /api/hello}, {@code /api/categories}
+ * y, al final, los casos de error. Ninguna prueba depende del orden de
+ * los campos en el JSON o el XML.
  */
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -73,9 +79,16 @@ class IndexControllerTest {
     private static final String GREETING_XML = "/api/greeting-xml";
     private static final String HEADERS = "/api/headers";
     private static final String HELLO = "/api/hello";
+    private static final String CATEGORIES_PATH = "/api/categories";
 
     /** birthDate válida (pasada, ISO-8601) para las pruebas de /api/hello. */
     private static final String BIRTH_DATE = "1985-10-26";
+
+    /** Separador de categories en /api/hello ({@code @Separator(",")}). */
+    private static final String SEPARATOR = ",";
+
+    /** categories válidas, con el separador, para las pruebas de /api/hello. */
+    private static final String CATEGORIES = "java" + SEPARATOR + "quarkus";
 
     /** CSV del user del saludo, con el separador configurado en UserCsvMessageBodyWriter. */
     private static final String EXPECTED_CSV = csvLine("name", "age", "email")
@@ -652,6 +665,7 @@ class IndexControllerTest {
     @Order(35)
     void helloConNameYAgeSaludaEnJson() {
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .accept("application/json")
                 .queryParam("name", "Ana")
@@ -660,20 +674,23 @@ class IndexControllerTest {
                 .then()
                 .statusCode(200)
                 .contentType(ContentType.JSON)
-                // exactamente message, name, age y birthDate
-                .body("$", aMapWithSize(4))
+                // exactamente message, name, age, birthDate y categories
+                .body("$", aMapWithSize(5))
                 .body("message", is("Hola, Ana!"))
                 .body("name", is("Ana"))
                 // age es un número en el JSON, no un texto
                 .body("age", is(40))
                 // la fecha va como texto ISO-8601
-                .body("birthDate", is(BIRTH_DATE));
+                .body("birthDate", is(BIRTH_DATE))
+                // la lista va como un arreglo JSON, en el mismo orden
+                .body("categories", contains("java", "quarkus"));
     }
 
     @Test
     @Order(36)
     void helloConAcceptXmlSaludaEnXml() {
         XmlPath xml = given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .accept("application/xml")
                 .queryParam("name", "Ana")
@@ -689,14 +706,17 @@ class IndexControllerTest {
                 .body("response.birthDate", is(BIRTH_DATE))
                 .extract().xmlPath();
 
+        // en XML la lista es un elemento <categories> por cada categoría
+        assertThat(xml.getList("response.categories", String.class), contains("java", "quarkus"));
         assertThat(xml.getList("response.children().collect { it.name() }", String.class),
-                containsInAnyOrder("message", "name", "age", "birthDate"));
+                containsInAnyOrder("message", "name", "age", "birthDate", "categories", "categories"));
     }
 
     @Test
     @Order(37)
     void helloConFormatXmlSaludaEnXml() {
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .queryParam("name", "Ana")
                 .queryParam("age", 40)
@@ -713,6 +733,7 @@ class IndexControllerTest {
     void helloSinNameSaludaAlMundo() {
         // @DefaultValue("Mundo"): sin name no falla @NotBlank
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .queryParam("age", 40)
                 .when().get(HELLO)
@@ -727,6 +748,7 @@ class IndexControllerTest {
     void helloConNameVacioDevuelve400() {
         // @DefaultValue solo aplica si name no viene; si viene vacío, falla @NotBlank
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .queryParam("name", "   ")
                 .queryParam("age", 40)
@@ -741,6 +763,7 @@ class IndexControllerTest {
     @Order(40)
     void helloConNameDemasiadoLargoDevuelve400() {
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .queryParam("name", "a".repeat(NAME_MAX_LENGTH + 1))
                 .queryParam("age", 40)
@@ -757,6 +780,7 @@ class IndexControllerTest {
     void helloConNameDemasiadoCortoDevuelve400() {
         // @Size(min = 3)
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .queryParam("name", "Al")
                 .queryParam("age", 40)
@@ -773,6 +797,7 @@ class IndexControllerTest {
     void helloConNameDelLargoMaximoSaluda() {
         String name = "a".repeat(NAME_MAX_LENGTH);
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .queryParam("name", name)
                 .queryParam("age", 40)
@@ -786,6 +811,7 @@ class IndexControllerTest {
     @Order(43)
     void helloSinAgeDevuelve400() {
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .accept("application/json")
                 .queryParam("name", "Ana")
@@ -803,6 +829,7 @@ class IndexControllerTest {
     void helloConAgeVacioDevuelve400() {
         // ?age= sin valor llega como null al Integer
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .queryParam("name", "Ana")
                 .queryParam("age", "")
@@ -816,6 +843,7 @@ class IndexControllerTest {
     @Order(45)
     void helloConAgeMenorAlMinimoDevuelve400() {
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .queryParam("name", "Ana")
                 .queryParam("age", AGE_MIN - 1)
@@ -830,6 +858,7 @@ class IndexControllerTest {
     @Order(46)
     void helloConAgeMayorAlMaximoDevuelve400() {
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .queryParam("name", "Ana")
                 .queryParam("age", AGE_MAX + 1)
@@ -845,8 +874,8 @@ class IndexControllerTest {
     void helloConAgeEnLosLimitesSaluda() {
         for (int age : new int[] { AGE_MIN, AGE_MAX }) {
             given()
+                    .queryParam("categories", CATEGORIES)
                     .queryParam("birthDate", BIRTH_DATE)
-                .queryParam("birthDate", BIRTH_DATE)
                     .queryParam("name", "Ana")
                     .queryParam("age", age)
                     .when().get(HELLO)
@@ -862,8 +891,8 @@ class IndexControllerTest {
         // JAX-RS: si un query param no se puede convertir a su tipo, responde 404
         for (String age : new String[] { "abc", "40.5" }) {
             given()
+                    .queryParam("categories", CATEGORIES)
                     .queryParam("birthDate", BIRTH_DATE)
-                .queryParam("birthDate", BIRTH_DATE)
                     .queryParam("name", "Ana")
                     .queryParam("age", age)
                     .when().get(HELLO)
@@ -877,6 +906,7 @@ class IndexControllerTest {
     void helloSinNameNiAgeConAcceptXmlDevuelveLaViolacionEnXml() {
         // el reporte de validación también respeta la content negotiation
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .accept("application/xml")
                 .when().get(HELLO)
@@ -892,6 +922,7 @@ class IndexControllerTest {
     @Order(50)
     void helloSinBirthDateDevuelve400() {
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("name", "Ana")
                 .queryParam("age", 40)
                 .when().get(HELLO)
@@ -907,6 +938,7 @@ class IndexControllerTest {
     void helloConBirthDateVacioDevuelve400() {
         // ?birthDate= sin valor llega como null al LocalDate
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("name", "Ana")
                 .queryParam("age", 40)
                 .queryParam("birthDate", "")
@@ -923,6 +955,7 @@ class IndexControllerTest {
         LocalDate today = LocalDate.now();
         for (LocalDate date : new LocalDate[] { today, today.plusDays(1), today.plusYears(1) }) {
             given()
+                    .queryParam("categories", CATEGORIES)
                     .queryParam("name", "Ana")
                     .queryParam("age", 40)
                     .queryParam("birthDate", date.toString())
@@ -939,6 +972,7 @@ class IndexControllerTest {
     void helloConBirthDateDeAyerSaluda() {
         String yesterday = LocalDate.now().minusDays(1).toString();
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("name", "Ana")
                 .queryParam("age", 0)
                 .queryParam("birthDate", yesterday)
@@ -952,6 +986,7 @@ class IndexControllerTest {
     @Order(54)
     void helloAceptaUn29DeFebreroDeAnioBisiesto() {
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("name", "Ana")
                 .queryParam("age", 40)
                 .queryParam("birthDate", "2024-02-29")
@@ -967,6 +1002,7 @@ class IndexControllerTest {
         // igual que age: si el texto no se puede convertir a LocalDate, JAX-RS responde 404
         for (String date : new String[] { "2026-13-45", "2025-02-29", "26/10/1985", "ayer" }) {
             given()
+                    .queryParam("categories", CATEGORIES)
                     .queryParam("name", "Ana")
                     .queryParam("age", 40)
                     .queryParam("birthDate", date)
@@ -978,8 +1014,132 @@ class IndexControllerTest {
 
     @Test
     @Order(56)
+    void helloAceptaCategoriesRepitiendoElParametro() {
+        given()
+                .queryParam("name", "Ana")
+                .queryParam("age", 40)
+                .queryParam("birthDate", BIRTH_DATE)
+                // ?categories=java&categories=quarkus
+                .queryParam("categories", "java", "quarkus")
+                .when().get(HELLO)
+                .then()
+                .statusCode(200)
+                .body("categories", contains("java", "quarkus"));
+    }
+
+    @Test
+    @Order(57)
+    void helloAceptaCategoriesConElSeparador() {
+        // @Separator(","): ?categories=java,quarkus,rest
+        given()
+                .queryParam("name", "Ana")
+                .queryParam("age", 40)
+                .queryParam("birthDate", BIRTH_DATE)
+                .queryParam("categories", String.join(SEPARATOR, "java", "quarkus", "rest"))
+                .when().get(HELLO)
+                .then()
+                .statusCode(200)
+                .body("categories", contains("java", "quarkus", "rest"));
+    }
+
+    @Test
+    @Order(58)
+    void helloAceptaCategoriesRepetidasYConSeparadorALaVez() {
+        given()
+                .queryParam("name", "Ana")
+                .queryParam("age", 40)
+                .queryParam("birthDate", BIRTH_DATE)
+                .queryParam("categories", "java" + SEPARATOR + "quarkus", "rest")
+                .when().get(HELLO)
+                .then()
+                .statusCode(200)
+                .body("categories", contains("java", "quarkus", "rest"));
+    }
+
+    @Test
+    @Order(59)
+    void helloSinCategoriesDevuelve400() {
+        given()
+                .queryParam("name", "Ana")
+                .queryParam("age", 40)
+                .queryParam("birthDate", BIRTH_DATE)
+                .when().get(HELLO)
+                .then()
+                .statusCode(400)
+                .body("violations", hasSize(1))
+                .body("violations[0].field", is("handler.categories"))
+                .body("violations[0].message", is("El parámetro categories es requerido: envía al menos una categoría"));
+    }
+
+    @Test
+    @Order(60)
+    void helloConCategoriesVacioDevuelve400() {
+        given()
+                .queryParam("name", "Ana")
+                .queryParam("age", 40)
+                .queryParam("birthDate", BIRTH_DATE)
+                .queryParam("categories", "")
+                .when().get(HELLO)
+                .then()
+                .statusCode(400)
+                .body("violations[0].field", is("handler.categories"));
+    }
+
+    @Test
+    @Order(61)
+    void helloConUnaCategoriaEnBlancoDevuelve400ConSuPosicion() {
+        // List<@NotBlank String>: la regla se aplica a cada elemento
+        for (String categories : new String[] { "java,,rest", "java, ,rest" }) {
+            given()
+                    .queryParam("name", "Ana")
+                    .queryParam("age", 40)
+                    .queryParam("birthDate", BIRTH_DATE)
+                    .queryParam("categories", categories)
+                    .when().get(HELLO)
+                    .then()
+                    .statusCode(400)
+                    .body("violations", hasSize(1))
+                    // el reporte indica qué elemento falló: el segundo (índice 1)
+                    .body("violations[0].field", is("handler.categories[1].<list element>"))
+                    .body("violations[0].message", is("Las categorías de categories no pueden estar vacías"));
+        }
+    }
+
+    @Test
+    @Order(62)
+    void helloConElMaximoDeCategoriesSaluda() {
+        given()
+                .queryParam("name", "Ana")
+                .queryParam("age", 40)
+                .queryParam("birthDate", BIRTH_DATE)
+                .queryParam("categories", String.join(SEPARATOR, Collections.nCopies(CATEGORIES_MAX, "java")))
+                .when().get(HELLO)
+                .then()
+                .statusCode(200)
+                .body("categories", hasSize(CATEGORIES_MAX));
+    }
+
+    @Test
+    @Order(63)
+    void helloConDemasiadasCategoriesDevuelve400() {
+        given()
+                .queryParam("name", "Ana")
+                .queryParam("age", 40)
+                .queryParam("birthDate", BIRTH_DATE)
+                .queryParam("categories", String.join(SEPARATOR, Collections.nCopies(CATEGORIES_MAX + 1, "java")))
+                .when().get(HELLO)
+                .then()
+                .statusCode(400)
+                .body("violations", hasSize(1))
+                .body("violations[0].field", is("handler.categories"))
+                .body("violations[0].message", is("El parámetro categories admite hasta " + CATEGORIES_MAX + " categorías"));
+    }
+
+    @Test
+    @Order(64)
     void helloRespetaLosAcentos() {
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .queryParam("name", "José")
                 .queryParam("age", 40)
@@ -991,9 +1151,10 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(57)
+    @Order(65)
     void helloConAcceptNoSoportadoDevuelve406() {
         given()
+                .queryParam("categories", CATEGORIES)
                 .queryParam("birthDate", BIRTH_DATE)
                 .accept(ContentType.HTML)
                 .queryParam("name", "Ana")
@@ -1004,7 +1165,212 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(58)
+    @Order(66)
+    void categoriesJuntaLosParametrosRepetidosEnUnaLista() {
+        // ?category=java&category=quarkus&category=rest: el parámetro va en singular
+        given()
+                .accept("application/json")
+                .queryParam("category", "java", "quarkus", "rest")
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(200)
+                .contentType(ContentType.JSON)
+                .body("$", aMapWithSize(2))
+                // la lista mantiene el orden en que llegaron
+                .body("categories", contains("java", "quarkus", "rest"))
+                .body("total", is(3));
+    }
+
+    @Test
+    @Order(67)
+    void categoriesConUnSoloParametroEsUnaListaDeUno() {
+        given()
+                .queryParam("category", "java")
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(200)
+                .body("categories", contains("java"))
+                .body("total", is(1));
+    }
+
+    @Test
+    @Order(68)
+    void categoriesSinSeparadorNoDivideLaComa() {
+        // sin @Separator, "java,quarkus" es una sola categoría
+        given()
+                .queryParam("category", "java,quarkus")
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(200)
+                .body("categories", contains("java,quarkus"))
+                .body("total", is(1));
+    }
+
+    @Test
+    @Order(69)
+    void categoriesSinParametroDevuelve400() {
+        // sin el parámetro llega una lista vacía: @NotEmpty la rechaza
+        given()
+                .accept("application/json")
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(400)
+                .contentType(ContentType.JSON)
+                .body("violations", hasSize(1))
+                .body("violations[0].field", is("categories.categories"))
+                .body("violations[0].message", is("El parámetro category es requerido: envía al menos una categoría"));
+    }
+
+    @Test
+    @Order(70)
+    void categoriesConElNombreEnPluralDevuelve400() {
+        // el nombre del parámetro en la URL es category: categories no llega y la lista queda vacía
+        given()
+                .queryParam("categories", "java", "quarkus")
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(400)
+                .body("violations[0].field", is("categories.categories"));
+    }
+
+    @Test
+    @Order(71)
+    void categoriesSoloConValoresVaciosDevuelve400() {
+        // Quarkus descarta los vacíos antes de validar: la lista queda vacía
+        given()
+                .queryParam("category", "", "")
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(400)
+                .body("violations[0].field", is("categories.categories"));
+    }
+
+    @Test
+    @Order(72)
+    void categoriesConElMaximoDeCategoriasResponde200() {
+        given()
+                .queryParam("category", Collections.nCopies(CATEGORIES_MAX, "java"))
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(200)
+                .body("total", is(CATEGORIES_MAX));
+    }
+
+    @Test
+    @Order(73)
+    void categoriesConDemasiadasCategoriasDevuelve400() {
+        // regla de la lista completa: @Size(max)
+        given()
+                .queryParam("category", Collections.nCopies(CATEGORIES_MAX + 1, "java"))
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(400)
+                .body("violations", hasSize(1))
+                .body("violations[0].field", is("categories.categories"))
+                .body("violations[0].message", is("El parámetro category admite hasta " + CATEGORIES_MAX + " categorías"));
+    }
+
+    @Test
+    @Order(74)
+    void categoriesConUnaCategoriaEnBlancoDevuelve400ConSuPosicion() {
+        // regla de cada elemento: @NotBlank
+        given()
+                .queryParam("category", "java", "   ")
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(400)
+                .body("violations", hasSize(1))
+                // el reporte indica qué elemento falló: el segundo (índice 1)
+                .body("violations[0].field", is("categories.categories[1].<list element>"))
+                .body("violations[0].message", is("Las categorías no pueden estar en blanco"));
+    }
+
+    @Test
+    @Order(75)
+    void categoriesConUnaCategoriaDemasiadoCortaODemasiadoLargaDevuelve400() {
+        // regla de cada elemento: @Size(min, max)
+        for (String category : new String[] { "x", "a".repeat(CATEGORY_MAX_LENGTH + 1) }) {
+            given()
+                    .queryParam("category", "java", category)
+                    .when().get(CATEGORIES_PATH)
+                    .then()
+                    .statusCode(400)
+                    .body("violations", hasSize(1))
+                    .body("violations[0].field", is("categories.categories[1].<list element>"))
+                    .body("violations[0].message", is("Cada categoría debe tener entre "
+                            + CATEGORY_MIN_LENGTH + " y " + CATEGORY_MAX_LENGTH + " caracteres"));
+        }
+    }
+
+    @Test
+    @Order(76)
+    void categoriesConCategoriasDelLargoMinimoYMaximoResponde200() {
+        String shortest = "a".repeat(CATEGORY_MIN_LENGTH);
+        String longest = "a".repeat(CATEGORY_MAX_LENGTH);
+        given()
+                .queryParam("category", shortest, longest)
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(200)
+                .body("categories", contains(shortest, longest));
+    }
+
+    @Test
+    @Order(77)
+    void categoriesDevuelveTodasLasViolacionesDeLaListaYDeSusElementos() {
+        // 6 categorías: falla la lista (más de 5) y también el elemento "x" (índice 2)
+        given()
+                .queryParam("category", "java", "rest", "x", "sql", "css", "html")
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(400)
+                .body("violations", hasSize(2))
+                .body("violations.field", containsInAnyOrder(
+                        "categories.categories", "categories.categories[2].<list element>"));
+    }
+
+    @Test
+    @Order(78)
+    void categoriesMantieneLosRepetidosYDescartaLosVacios() {
+        given()
+                .queryParam("category", "java", "", "java")
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(200)
+                .body("categories", contains("java", "java"))
+                .body("total", is(2));
+    }
+
+    @Test
+    @Order(79)
+    void categoriesRespetaAcentosEspaciosYCaracteresEspeciales() {
+        // RestAssured codifica los valores (; y # van como %3B y %23)
+        given()
+                .queryParam("category", "Programación", "Bases de datos", "java;quarkus", "c#")
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(200)
+                .body("categories", contains("Programación", "Bases de datos", "java;quarkus", "c#"));
+    }
+
+    @Test
+    @Order(80)
+    void categoriesConAcceptXmlDevuelveUnElementoPorCategoria() {
+        XmlPath xml = given()
+                .accept("application/xml")
+                .queryParam("category", "java", "quarkus")
+                .when().get(CATEGORIES_PATH)
+                .then()
+                .statusCode(200)
+                .contentType(ContentType.XML)
+                .body("response.total", is("2"))
+                .extract().xmlPath();
+
+        assertThat(xml.getList("response.categories", String.class), contains("java", "quarkus"));
+    }
+
+    @Test
+    @Order(81)
     void metodoNoPermitidoDevuelve405() {
         given()
                 .when().post(GREETING)
@@ -1013,7 +1379,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(59)
+    @Order(82)
     void metodoNoPermitidoEnUserDevuelve405() {
         given()
                 .when().post(USER)
@@ -1022,7 +1388,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(60)
+    @Order(83)
     void metodoNoPermitidoEnGreetingMapDevuelve405() {
         given()
                 .when().post(GREETING_MAP)
@@ -1031,7 +1397,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(61)
+    @Order(84)
     void metodoNoPermitidoEnGreetingXmlDevuelve405() {
         given()
                 .when().post(GREETING_XML)
@@ -1040,7 +1406,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(62)
+    @Order(85)
     void metodoNoPermitidoEnHeadersDevuelve405() {
         given()
                 .header(CLIENT_ID_HEADER, "app-movil")
@@ -1050,7 +1416,7 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(63)
+    @Order(86)
     void metodoNoPermitidoEnHelloDevuelve405() {
         given()
                 .when().post(HELLO)
@@ -1059,7 +1425,16 @@ class IndexControllerTest {
     }
 
     @Test
-    @Order(64)
+    @Order(87)
+    void metodoNoPermitidoEnCategoriesDevuelve405() {
+        given()
+                .when().post(CATEGORIES_PATH)
+                .then()
+                .statusCode(405);
+    }
+
+    @Test
+    @Order(88)
     void rutaInexistenteDevuelve404() {
         given()
                 .when().get("/api/no-existe")

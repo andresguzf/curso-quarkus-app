@@ -2,11 +2,13 @@ package com.andres.courses.claude.quarkus.controllers;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
@@ -21,7 +23,9 @@ import jakarta.ws.rs.core.MediaType;
 
 import org.jboss.resteasy.reactive.RestQuery;
 import org.jboss.resteasy.reactive.RestResponse;
+import org.jboss.resteasy.reactive.Separator;
 
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -51,6 +55,13 @@ public class IndexController {
     /** Rango válido del parámetro {@code age} de {@code GET /api/hello}. */
     public static final int AGE_MIN = 0;
     public static final int AGE_MAX = 120;
+
+    /** Máximo de categorías del parámetro {@code categories} de {@code GET /api/hello}. */
+    public static final int CATEGORIES_MAX = 5;
+
+    /** Largo permitido de cada categoría de {@code GET /api/categories}. */
+    public static final int CATEGORY_MIN_LENGTH = 2;
+    public static final int CATEGORY_MAX_LENGTH = 20;
 
     /**
      * GET /api/index → {"message": "Hola mundo de Quarkus"}
@@ -195,12 +206,14 @@ public class IndexController {
     }
 
     /**
-     * GET /api/hello?name=Ana&amp;age=40&amp;birthDate=1985-10-26 → 200 OK con un
-     * saludo para ese nombre, su edad y su fecha de nacimiento, en JSON o en
-     * XML según el {@code Accept} (o {@code ?format=json|xml}):
+     * GET /api/hello?name=Ana&amp;age=40&amp;birthDate=1985-10-26&amp;categories=java,quarkus
+     * → 200 OK con un saludo para ese nombre, su edad, su fecha de nacimiento
+     * y sus categorías, en JSON o en XML según el {@code Accept} (o
+     * {@code ?format=json|xml}):
      * <pre>
-     * {"message": "Hola, Ana!", "name": "Ana", "age": 40, "birthDate": "1985-10-26"}
-     * &lt;response&gt;&lt;message&gt;Hola, Ana!&lt;/message&gt;&lt;name&gt;Ana&lt;/name&gt;&lt;age&gt;40&lt;/age&gt;&lt;birthDate&gt;1985-10-26&lt;/birthDate&gt;&lt;/response&gt;
+     * {"message": "Hola, Ana!", "name": "Ana", "age": 40, "birthDate": "1985-10-26",
+     *  "categories": ["java", "quarkus"]}
+     * &lt;response&gt;...&lt;categories&gt;java&lt;/categories&gt;&lt;categories&gt;quarkus&lt;/categories&gt;&lt;/response&gt;
      * </pre>
      * {@code name} saluda a "Mundo" si no viene ({@code @DefaultValue}); si
      * viene, no puede estar vacío ({@code @NotBlank}) y debe tener entre 3 y
@@ -218,6 +231,14 @@ public class IndexController {
      * ({@code @Past}). Si falta o no es pasada → 400; si no es una fecha válida
      * (p. ej. {@code 2026-13-45} o {@code 26/10/1985}) → 404, igual que
      * {@code age}.
+     * <p>
+     * {@code categories} es una lista de textos ({@code List<String>}): se
+     * envía repitiendo el parámetro ({@code ?categories=java&categories=quarkus})
+     * o separada por comas gracias a {@code @Separator(",")}
+     * ({@code ?categories=java,quarkus}). Es requerida ({@code @NotEmpty}),
+     * admite hasta {@value #CATEGORIES_MAX} ({@code @Size}) y cada categoría
+     * debe tener texto ({@code List<@NotBlank String>}); si una falla, el
+     * reporte indica su posición ({@code categories[1]}).
      * <p>
      * Sin DTO ni {@code Map}: la respuesta es un {@link ObjectNode} de
      * Jackson, un nodo JSON que se arma con {@code put}. Jackson lo serializa
@@ -243,7 +264,14 @@ public class IndexController {
         @RestQuery
         @NotNull(message = "El parámetro birthDate es requerido")
         @Past(message = "El parámetro birthDate debe ser una fecha pasada")
-        LocalDate birthDate) {
+        LocalDate birthDate,
+        // lista: ?categories=java&categories=quarkus o, con @Separator, ?categories=java,quarkus
+        @RestQuery
+        @Separator(",")
+        @NotEmpty(message = "El parámetro categories es requerido: envía al menos una categoría")
+        @Size(max = CATEGORIES_MAX, message = "El parámetro categories admite hasta {max} categorías")
+        // la regla dentro del tipo genérico se aplica a cada elemento de la lista
+        List<@NotBlank(message = "Las categorías de categories no pueden estar vacías") String> categories) {
         ObjectNode body = JsonNodeFactory.instance.objectNode()
                 .put("message", "Hola, " + name + "!")
                 .put("name", name)
@@ -251,6 +279,66 @@ public class IndexController {
                 .put("age", age)
                 // un ObjectNode no sabe de java.time: la fecha va como texto ISO-8601
                 .put("birthDate", birthDate.toString());
+        // la lista va como un arreglo JSON de textos
+        ArrayNode categoryArray = body.putArray("categories");
+        categories.forEach(categoryArray::add);
+
+        return RestResponse.ResponseBuilder.<ObjectNode>create(RestResponse.Status.OK)
+                .entity(body)
+                .build();
+    }
+
+    /**
+     * GET /api/categories?category=java&amp;category=quarkus → 200 OK con la
+     * lista de categorías recibida, en JSON o XML:
+     * <pre>
+     * {"categories": ["java", "quarkus"], "total": 2}
+     * &lt;response&gt;&lt;categories&gt;java&lt;/categories&gt;&lt;categories&gt;quarkus&lt;/categories&gt;&lt;total&gt;2&lt;/total&gt;&lt;/response&gt;
+     * </pre>
+     * Cada categoría es un query param independiente con el mismo nombre,
+     * {@code category} (en singular, porque cada uno lleva una sola), y JAX-RS
+     * junta todos sus valores, en orden, en el argumento {@code categories}
+     * (en plural, porque es la lista): {@code @RestQuery("category")} separa
+     * el nombre del parámetro en la URL del nombre de la variable. Sin
+     * {@code @Separator}, una coma no separa: {@code ?category=java,quarkus}
+     * es una sola categoría, {@code "java,quarkus"}.
+     * <p>
+     * Validación de la lista completa:
+     * <ul>
+     * <li>{@code @NotEmpty}: al menos una categoría. Sin el parámetro llega una
+     * lista vacía (no {@code null}), por eso {@code @NotEmpty} y no
+     * {@code @NotNull}. Los valores vacíos ({@code ?category=}) Quarkus los
+     * descarta antes de validar</li>
+     * <li>{@code @Size}: hasta {@value #CATEGORIES_MAX} categorías</li>
+     * </ul>
+     * Validación de cada elemento, con las reglas dentro del tipo genérico
+     * ({@code List<@NotBlank @Size String>}):
+     * <ul>
+     * <li>{@code @NotBlank}: sin categorías en blanco ({@code ?category=%20})</li>
+     * <li>{@code @Size}: entre {@value #CATEGORY_MIN_LENGTH} y
+     * {@value #CATEGORY_MAX_LENGTH} caracteres</li>
+     * </ul>
+     * Si algo falla → 400 con el {@code ViolationReport}; para un elemento, el
+     * campo indica su posición: {@code categories.categories[1].<list element>}.
+     * Los valores repetidos se mantienen.
+     */
+    @Path("/categories")
+    @GET
+    @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+    public RestResponse<ObjectNode> categories(
+            @RestQuery("category")
+            // reglas de la lista completa
+            @NotEmpty(message = "El parámetro category es requerido: envía al menos una categoría")
+            @Size(max = CATEGORIES_MAX, message = "El parámetro category admite hasta {max} categorías")
+            // reglas de cada elemento, dentro del tipo genérico
+            List<@NotBlank(message = "Las categorías no pueden estar en blanco")
+                 @Size(min = CATEGORY_MIN_LENGTH, max = CATEGORY_MAX_LENGTH,
+                       message = "Cada categoría debe tener entre {min} y {max} caracteres")
+                 String> categories) {
+        ObjectNode body = JsonNodeFactory.instance.objectNode();
+        ArrayNode categoryArray = body.putArray("categories");
+        categories.forEach(categoryArray::add);
+        body.put("total", categories.size());
 
         return RestResponse.ResponseBuilder.<ObjectNode>create(RestResponse.Status.OK)
                 .entity(body)
