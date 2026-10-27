@@ -1,16 +1,31 @@
 package com.andres.courses.claude.quarkus.controllers;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Past;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 
+import org.jboss.resteasy.reactive.RestQuery;
 import org.jboss.resteasy.reactive.RestResponse;
 
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import com.andres.courses.claude.quarkus.models.ClientHeadersDto;
 import com.andres.courses.claude.quarkus.models.GreetingDto;
 import com.andres.courses.claude.quarkus.models.User;
 import com.andres.courses.claude.quarkus.providers.FormatQueryParamFilter;
@@ -23,6 +38,19 @@ import com.andres.courses.claude.quarkus.providers.UserExcelMessageBodyWriter;
  */
 @Path("/api")
 public class IndexController {
+
+    /** Header requerido de {@code GET /api/headers}. */
+    public static final String CLIENT_ID_HEADER = "X-Client-Id";
+
+    /** Header opcional de {@code GET /api/headers}. */
+    public static final String CLIENT_VERSION_HEADER = "X-Client-Version";
+
+    /** Largo máximo del parámetro {@code name} de {@code GET /api/hello}. */
+    public static final int NAME_MAX_LENGTH = 8;
+
+    /** Rango válido del parámetro {@code age} de {@code GET /api/hello}. */
+    public static final int AGE_MIN = 0;
+    public static final int AGE_MAX = 120;
 
     /**
      * GET /api/index → {"message": "Hola mundo de Quarkus"}
@@ -129,6 +157,103 @@ public class IndexController {
 
         return RestResponse.ResponseBuilder.<GreetingDto>create(RestResponse.Status.OK)
                 .entity(greeting)
+                .build();
+    }
+
+    /**
+     * GET /api/headers → 200 OK con los valores de los headers del request,
+     * en JSON o XML: {"clientId": "...", "clientVersion": "...",
+     * "contentTypeHeader": "..."}
+     * <ul>
+     * <li>{@code X-Client-Id}: requerido ({@code @NotBlank}). Si falta o viene
+     * vacío → 400 Bad Request con el detalle de la validación</li>
+     * <li>{@code X-Client-Version}: opcional. Si no viene, {@code clientVersion}
+     * sale como {@code null}; si viene, debe tener formato de versión
+     * ({@code @Pattern}: 1.0, 2.1.0...)</li>
+     * <li>{@code Accept}: el header que envió el cliente, en
+     * {@code contentTypeHeader}</li>
+     * </ul>
+     * {@code @HeaderParam} solo inyecta el valor, o {@code null} si el header
+     * no viene: las reglas de Bean Validation (Hibernate Validator) son las que
+     * lo hacen requerido. Quarkus las valida antes de ejecutar el método.
+     */
+    @Path("/headers")
+    @GET
+    @Produces({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
+    public RestResponse<ClientHeadersDto> headers(
+            @HeaderParam(CLIENT_ID_HEADER)
+            @NotBlank(message = "El header " + CLIENT_ID_HEADER + " es requerido") String clientId,
+            // opcional: @Pattern solo se aplica si el header viene (null es válido)
+            @HeaderParam(CLIENT_VERSION_HEADER)
+            @Pattern(regexp = "\\d+(\\.\\d+){1,2}",
+                    message = "El header " + CLIENT_VERSION_HEADER + " debe tener formato de versión, p. ej. 2.1.0")
+            String clientVersion,
+            @HeaderParam("Accept") String contentTypeHeader) {
+        return RestResponse.ResponseBuilder.<ClientHeadersDto>create(RestResponse.Status.OK)
+                .entity(new ClientHeadersDto(clientId, clientVersion, contentTypeHeader))
+                .build();
+    }
+
+    /**
+     * GET /api/hello?name=Ana&amp;age=40&amp;birthDate=1985-10-26 → 200 OK con un
+     * saludo para ese nombre, su edad y su fecha de nacimiento, en JSON o en
+     * XML según el {@code Accept} (o {@code ?format=json|xml}):
+     * <pre>
+     * {"message": "Hola, Ana!", "name": "Ana", "age": 40, "birthDate": "1985-10-26"}
+     * &lt;response&gt;&lt;message&gt;Hola, Ana!&lt;/message&gt;&lt;name&gt;Ana&lt;/name&gt;&lt;age&gt;40&lt;/age&gt;&lt;birthDate&gt;1985-10-26&lt;/birthDate&gt;&lt;/response&gt;
+     * </pre>
+     * {@code name} saluda a "Mundo" si no viene ({@code @DefaultValue}); si
+     * viene, no puede estar vacío ({@code @NotBlank}) y debe tener entre 3 y
+     * {@value #NAME_MAX_LENGTH} caracteres ({@code @Size}). Si no cumple → 400
+     * Bad Request con el detalle de la validación.
+     * <p>
+     * {@code age} es un número entero ({@link Integer}): requerido
+     * ({@code @NotNull}) y entre {@value #AGE_MIN} y {@value #AGE_MAX}
+     * ({@code @Min}/{@code @Max}). Si falta o está fuera de rango → 400 con el
+     * detalle; si no es un número (p. ej. {@code age=abc}) Quarkus no puede
+     * convertirlo y, como manda JAX-RS para un query param, responde 404.
+     * <p>
+     * {@code birthDate} es una fecha ({@link LocalDate}) en formato ISO-8601
+     * ({@code yyyy-MM-dd}): requerida ({@code @NotNull}) y en el pasado
+     * ({@code @Past}). Si falta o no es pasada → 400; si no es una fecha válida
+     * (p. ej. {@code 2026-13-45} o {@code 26/10/1985}) → 404, igual que
+     * {@code age}.
+     * <p>
+     * Sin DTO ni {@code Map}: la respuesta es un {@link ObjectNode} de
+     * Jackson, un nodo JSON que se arma con {@code put}. Jackson lo serializa
+     * a JSON y {@code XmlMessageBodyWriter} a XML (con raíz {@code <response>}).
+     */
+    @Path("/hello")
+    @GET
+    @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+    public RestResponse<ObjectNode> handler(
+        //     @QueryParam("name")
+        @RestQuery
+        @DefaultValue("Mundo")
+        @NotBlank(message = "El parámetro name es requerido")
+        @Size(min=3, max = NAME_MAX_LENGTH, message = "El parámetro name debe tener entre {min} y {max} caracteres")
+        String name,
+        // Integer y no int: un int sin valor llega como 0 y @NotNull no podría detectarlo
+        @RestQuery
+        @NotNull(message = "El parámetro age es requerido")
+        @Min(value = AGE_MIN, message = "El parámetro age debe ser mayor o igual a {value}")
+        @Max(value = AGE_MAX, message = "El parámetro age debe ser menor o igual a {value}")
+        Integer age,
+        // fecha en formato ISO-8601 (yyyy-MM-dd): Quarkus la convierte a LocalDate
+        @RestQuery
+        @NotNull(message = "El parámetro birthDate es requerido")
+        @Past(message = "El parámetro birthDate debe ser una fecha pasada")
+        LocalDate birthDate) {
+        ObjectNode body = JsonNodeFactory.instance.objectNode()
+                .put("message", "Hola, " + name + "!")
+                .put("name", name)
+                // put(String, Integer) lo escribe como número, no como texto
+                .put("age", age)
+                // un ObjectNode no sabe de java.time: la fecha va como texto ISO-8601
+                .put("birthDate", birthDate.toString());
+
+        return RestResponse.ResponseBuilder.<ObjectNode>create(RestResponse.Status.OK)
+                .entity(body)
                 .build();
     }
 }

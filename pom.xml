@@ -45,6 +45,11 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>
         </dependency>
+        <!-- Bean Validation (Jakarta Validation): @NotBlank, @NotNull, @Size... en parámetros y DTOs -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-hibernate-validator</artifactId>
+        </dependency>
         <!-- Serialización a XML con Jackson (versión gestionada por el BOM de Quarkus) -->
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>

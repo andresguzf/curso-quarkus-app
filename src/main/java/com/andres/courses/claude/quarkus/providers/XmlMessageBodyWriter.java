@@ -13,6 +13,7 @@ import jakarta.ws.rs.ext.MessageBodyWriter;
 import jakarta.ws.rs.ext.Provider;
 
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
@@ -30,7 +31,10 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 @Produces(MediaType.APPLICATION_XML)
 public class XmlMessageBodyWriter implements MessageBodyWriter<Object> {
 
-    /** Elemento raíz del XML cuando la respuesta es un Map (no tiene nombre de clase útil). */
+    /**
+     * Elemento raíz del XML cuando la respuesta es un Map o un nodo de Jackson
+     * ({@code ObjectNode}): no tienen un nombre de clase útil.
+     */
     private static final String MAP_ROOT = "response";
 
     private final XmlMapper mapper = XmlMapper.builder()
@@ -51,7 +55,9 @@ public class XmlMessageBodyWriter implements MessageBodyWriter<Object> {
     public void writeTo(Object entity, Class<?> type, Type genericType, Annotation[] annotations,
             MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream)
             throws IOException {
-        ObjectWriter writer = entity instanceof Map ? mapper.writer().withRootName(MAP_ROOT) : mapper.writer();
+        ObjectWriter writer = entity instanceof Map || entity instanceof JsonNode
+                ? mapper.writer().withRootName(MAP_ROOT)
+                : mapper.writer();
         writer.writeValue(entityStream, entity);
     }
 }
