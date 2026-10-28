@@ -2,8 +2,10 @@ package com.andres.courses.claude.quarkus.providers;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
+import java.nio.charset.Charset;
 
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
@@ -50,6 +52,13 @@ public class XmlMessageBodyReader implements MessageBodyReader<Object> {
     public Object readFrom(Class<Object> type, Type genericType, Annotation[] annotations, MediaType mediaType,
             MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException {
         try {
+            // si el Content-Type trae charset (p. ej. ISO-8859-1), se lee con ese;
+            // si no, Jackson lo detecta del XML (UTF-8 por defecto)
+            String charset = mediaType.getParameters().get(MediaType.CHARSET_PARAMETER);
+            if (charset != null) {
+                return mapper.readValue(new InputStreamReader(entityStream, Charset.forName(charset)),
+                        mapper.constructType(genericType));
+            }
             return mapper.readValue(entityStream, mapper.constructType(genericType));
         } catch (JsonProcessingException e) {
             // XML mal formado o con un valor que no corresponde al tipo → 400, no 500

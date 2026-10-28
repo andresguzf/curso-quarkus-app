@@ -18,7 +18,7 @@ import jakarta.validation.constraints.Size;
  * componente se aplican cuando el parámetro del método lleva {@code @Valid}.
  *
  * @param name     nombre del producto: requerido, hasta {@value #NAME_MAX_LENGTH} caracteres
- * @param price    precio: requerido, mayor que 0 y con hasta 2 decimales;
+ * @param price    precio: requerido, mayor que 0 y con hasta 4 decimales;
  *                 {@code BigDecimal} y no {@code double} porque un precio
  *                 necesita decimales exactos
  * @param quantity cantidad en stock: requerida y mayor o igual a 0
@@ -29,7 +29,7 @@ public record Product(
         String name,
         @NotNull(message = "El precio es requerido")
         @Positive(message = "El precio debe ser mayor que 0")
-        @Digits(integer = 10, fraction = 2, message = "El precio admite hasta {fraction} decimales")
+        @Digits(integer = 12, fraction = 4, message = "El precio admite hasta {fraction} decimales")
         BigDecimal price,
         // Integer y no int: si falta llega null y @NotNull lo detecta (con int llegaría 0)
         @NotNull(message = "La cantidad es requerida")

@@ -94,15 +94,15 @@ class ProductControllerTest {
     @Test
     @Order(3)
     void crearProductoConLosValoresLimiteDevuelve201() {
-        // nombre del largo máximo, el menor precio con 2 decimales y cantidad 0
+        // nombre del largo máximo, el menor precio con 4 decimales y cantidad 0
         String name = "a".repeat(NAME_MAX_LENGTH);
         givenJson()
-                .body(Map.of("name", name, "price", new BigDecimal("0.01"), "quantity", 0))
+                .body(Map.of("name", name, "price", new BigDecimal("0.0001"), "quantity", 0))
                 .when().post(PRODUCTS)
                 .then()
                 .statusCode(201)
                 .body("name", is(name))
-                .body("price", is(new BigDecimal("0.01")))
+                .body("price", is(new BigDecimal("0.0001")))
                 .body("quantity", is(0));
     }
 
@@ -272,15 +272,15 @@ class ProductControllerTest {
 
     @Test
     @Order(14)
-    void crearProductoConPriceConMasDeDosDecimalesDevuelve400() {
+    void crearProductoConPriceConMasDeCuatroDecimalesDevuelve400() {
         givenJson()
-                .body(Map.of("name", "Teclado", "price", new BigDecimal("49.999"), "quantity", 10))
+                .body(Map.of("name", "Teclado", "price", new BigDecimal("49.99999"), "quantity", 10))
                 .when().post(PRODUCTS)
                 .then()
                 .statusCode(400)
                 .body("violations", hasSize(1))
                 .body("violations[0].field", is("create.product.price"))
-                .body("violations[0].message", is("El precio admite hasta 2 decimales"));
+                .body("violations[0].message", is("El precio admite hasta 4 decimales"));
     }
 
     @Test
