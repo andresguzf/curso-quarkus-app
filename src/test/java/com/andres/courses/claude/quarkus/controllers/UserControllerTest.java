@@ -28,7 +28,7 @@ import io.restassured.specification.RequestSpecification;
  * <p>
  * Primero los casos felices (JSON, XML y valores límite), luego las
  * validaciones de cada campo ({@code name}, {@code lastName}, {@code email},
- * {@code age}) y, al final, los errores del request.
+ * {@code age}, {@code rut}) y, al final, los errores del request.
  */
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -36,14 +36,22 @@ class UserControllerTest {
 
     private static final String USERS = "/api/users";
 
-    /** Usuario válido: cada prueba cambia solo el campo que necesita. */
+    /** RUT válido de prueba (sintético, con dígito verificador correcto). */
+    private static final String RUT = "11.111.111-1";
+
+    /** Usuario válido con {@link #RUT}: cada prueba cambia solo el campo que necesita. */
     private static Map<String, Object> user(Object name, Object lastName, Object email, Object age) {
+        return user(name, lastName, email, age, RUT);
+    }
+
+    private static Map<String, Object> user(Object name, Object lastName, Object email, Object age, Object rut) {
         // HashMap y no Map.of: algunas pruebas envían valores null
         Map<String, Object> user = new HashMap<>();
         user.put("name", name);
         user.put("lastName", lastName);
         user.put("email", email);
         user.put("age", age);
+        user.put("rut", rut);
         return user;
     }
 
@@ -62,12 +70,13 @@ class UserControllerTest {
                 .then()
                 .statusCode(201)
                 .contentType(ContentType.JSON)
-                // exactamente name, lastName, email y age
-                .body("$", aMapWithSize(4))
+                // exactamente name, lastName, email, age y rut
+                .body("$", aMapWithSize(5))
                 .body("name", is("Ana"))
                 .body("lastName", is("Pérez"))
                 .body("email", is("ana@correo.example"))
-                .body("age", is(30));
+                .body("age", is(30))
+                .body("rut", is(RUT));
     }
 
     @Test
@@ -82,6 +91,7 @@ class UserControllerTest {
                             <lastName>Pérez</lastName>
                             <email>ana@correo.example</email>
                             <age>30</age>
+                            <rut>11.111.111-1</rut>
                         </user>
                         """)
                 .when().post(USERS)
@@ -96,7 +106,7 @@ class UserControllerTest {
                 .extract().xmlPath();
 
         assertThat(xml.getList("UserDto.children().collect { it.name() }", String.class),
-                containsInAnyOrder("name", "lastName", "email", "age"));
+                containsInAnyOrder("name", "lastName", "email", "age", "rut"));
     }
 
     @Test
@@ -107,7 +117,7 @@ class UserControllerTest {
             given()
                     .contentType("application/xml; charset=" + charset)
                     .accept(ContentType.JSON)
-                    .body("<user><name>José</name><lastName>Núñez</lastName><email>jose@correo.example</email><age>30</age></user>")
+                    .body("<user><name>José</name><lastName>Núñez</lastName><email>jose@correo.example</email><age>30</age><rut>11.111.111-1</rut></user>")
                     .when().post(USERS)
                     .then()
                     .statusCode(201)
@@ -165,15 +175,16 @@ class UserControllerTest {
         // lastName, email y age en null: @Size, @Email y @PositiveOrZero no lo detectan,
         // @NotBlank y @NotNull sí
         givenJson()
-                .body(user("Andres", null, null, null))
+                .body(user("Andres", null, null, null, null))
                 .when().post(USERS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(3))
+                .body("violations", hasSize(4))
                 .body("violations.field", containsInAnyOrder(
-                        "create.user.lastName", "create.user.email", "create.user.age"))
+                        "create.user.lastName", "create.user.email", "create.user.age", "create.user.rut"))
                 .body("violations.message", containsInAnyOrder(
-                        "El apellido es requerido", "El email es requerido", "La edad es requerida"));
+                        "El apellido es requerido", "El email es requerido", "La edad es requerida",
+                        "El RUT es requerido"));
         // lo mismo si los campos ni siquiera vienen en el JSON
         givenJson()
                 .body("""
@@ -182,7 +193,7 @@ class UserControllerTest {
                 .when().post(USERS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(3));
+                .body("violations", hasSize(4));
     }
 
     @Test
@@ -281,27 +292,75 @@ class UserControllerTest {
 
     @Test
     @Order(14)
+    void crearUsuarioConRutEnDistintosFormatosDevuelve201() {
+        // RUT sintéticos: con y sin puntos, con y sin guion, dígito 0 y K (mayúscula y minúscula)
+        for (String rut : new String[] { "11.111.111-1", "22222222-2", "111111111", "1.000.000-9",
+                "10.000.004-0", "10.000.013-K", "10000013-k" }) {
+            givenJson()
+                    .body(user("Ana", "Pérez", "ana@correo.example", 30, rut))
+                    .when().post(USERS)
+                    .then()
+                    .statusCode(201)
+                    // se devuelve tal como llegó, sin normalizar
+                    .body("rut", is(rut));
+        }
+    }
+
+    @Test
+    @Order(15)
+    void crearUsuarioConRutInvalidoDevuelve400() {
+        // dígito verificador incorrecto, puntos mal puestos, letras, muy corto o vacío de cuerpo
+        for (String rut : new String[] { "11.111.111-2", "10.000.013-0", "1.1111.111-1", "11.111.111-X",
+                "abc", "123-4", "-1" }) {
+            givenJson()
+                    .body(user("Ana", "Pérez", "ana@correo.example", 30, rut))
+                    .when().post(USERS)
+                    .then()
+                    .statusCode(400)
+                    .body("violations", hasSize(1))
+                    .body("violations[0].field", is("create.user.rut"))
+                    .body("violations[0].message", is("El RUT no es válido"));
+        }
+    }
+
+    @Test
+    @Order(16)
+    void crearUsuarioConRutEnBlancoDevuelveSoloRequerido() {
+        // @Rut deja pasar el texto en blanco: el único error es el de @NotBlank
+        givenJson()
+                .body(user("Ana", "Pérez", "ana@correo.example", 30, "   "))
+                .when().post(USERS)
+                .then()
+                .statusCode(400)
+                .body("violations", hasSize(1))
+                .body("violations[0].field", is("create.user.rut"))
+                .body("violations[0].message", is("El RUT es requerido"));
+    }
+
+    @Test
+    @Order(17)
     void crearUsuarioConTodoInvalidoDevuelveTodasLasViolaciones() {
         givenJson()
-                .body(user("Al", "Li", "ana", -1))
+                .body(user("Al", "Li", "ana", -1, "11.111.111-2"))
                 .when().post(USERS)
                 .then()
                 .statusCode(400)
                 .contentType(ContentType.JSON)
                 .body("title", is("Constraint Violation"))
                 .body("status", is(400))
-                .body("violations", hasSize(4))
+                .body("violations", hasSize(5))
                 .body("violations.field", containsInAnyOrder(
-                        "create.user.name", "create.user.lastName", "create.user.email", "create.user.age"));
+                        "create.user.name", "create.user.lastName", "create.user.email", "create.user.age",
+                        "create.user.rut"));
     }
 
     @Test
-    @Order(15)
+    @Order(18)
     void crearUsuarioEnXmlInvalidoDevuelveLasViolacionesEnXml() {
         String body = given()
                 .contentType(ContentType.XML)
                 .accept(ContentType.XML)
-                .body("<user><name>Ana</name><lastName>Pérez</lastName><email>ana</email><age>-1</age></user>")
+                .body("<user><name>Ana</name><lastName>Pérez</lastName><email>ana</email><age>-1</age><rut>11.111.111-2</rut></user>")
                 .when().post(USERS)
                 .then()
                 .statusCode(400)
@@ -312,10 +371,12 @@ class UserControllerTest {
         assertThat(body, containsString("El email no tiene un formato válido"));
         assertThat(body, containsString("create.user.age"));
         assertThat(body, containsString("La edad debe ser mayor o igual a 0"));
+        assertThat(body, containsString("create.user.rut"));
+        assertThat(body, containsString("El RUT no es válido"));
     }
 
     @Test
-    @Order(16)
+    @Order(19)
     void crearUsuarioConAgeQueNoEsUnNumeroDevuelve400() {
         givenJson()
                 .body(user("Ana", "Pérez", "ana@correo.example", "treinta"))
@@ -325,7 +386,7 @@ class UserControllerTest {
     }
 
     @Test
-    @Order(17)
+    @Order(20)
     void metodoNoPermitidoEnUsersDevuelve405() {
         given()
                 .when().get(USERS)
