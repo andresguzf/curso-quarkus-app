@@ -1,5 +1,9 @@
 package com.andres.courses.claude.quarkus.controllers;
 
+import java.util.List;
+import java.util.Map;
+
+import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
@@ -9,8 +13,10 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
 import org.jboss.resteasy.reactive.RestResponse;
+import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 
 import com.andres.courses.claude.quarkus.models.Product;
+import com.andres.courses.claude.quarkus.validators.ValidationErrors;
 
 /**
  * Controller de productos.
@@ -44,8 +50,8 @@ public class ProductController {
      * <li>{@code @NotNull}: sin cuerpo → 400</li>
      * <li>{@code @Valid}: aplica las reglas de los campos de {@link Product}
      * ({@code name}, {@code price}, {@code quantity}); si alguna falla → 400
-     * con el {@code ViolationReport} en JSON o XML según el {@code Accept}, y
-     * el campo con su ruta: {@code create.product.price}</li>
+     * con cada campo y sus mensajes, en JSON o XML según el {@code Accept}:
+     * {"price": ["El precio debe ser mayor que 0"]} ({@link #validationErrors})</li>
      * <li>JSON o XML mal formado, o con un tipo incorrecto (p. ej.
      * {@code "price": "caro"}) → 400 antes de validar</li>
      * </ul>
@@ -62,5 +68,15 @@ public class ProductController {
         return RestResponse.ResponseBuilder.<Product>create(RestResponse.Status.CREATED)
                 .entity(product)
                 .build();
+    }
+
+    /**
+     * Errores de validación de este controller en formato simple: cada campo
+     * con la lista de sus mensajes, p. ej. {"name": ["El nombre es requerido"]}.
+     * La lógica es reutilizable y está en {@link ValidationErrors}.
+     */
+    @ServerExceptionMapper
+    public RestResponse<Map<String, List<String>>> validationErrors(ConstraintViolationException e) {
+        return ValidationErrors.badRequest(e);
     }
 }

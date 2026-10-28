@@ -1,5 +1,9 @@
 package com.andres.courses.claude.quarkus.controllers;
 
+import java.util.List;
+import java.util.Map;
+
+import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
@@ -9,8 +13,10 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
 import org.jboss.resteasy.reactive.RestResponse;
+import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 
 import com.andres.courses.claude.quarkus.models.UserDto;
+import com.andres.courses.claude.quarkus.validators.ValidationErrors;
 
 /**
  * Controller de usuarios.
@@ -34,8 +40,9 @@ public class UserController {
      * <li>{@code @Valid}: aplica las reglas de {@link UserDto}: {@code name}
      * y {@code lastName} requeridos y entre 3 y 20 caracteres; {@code email}
      * requerido y con formato válido; {@code age} requerida y mayor o igual
-     * a 0. Si alguna falla → 400 con el {@code ViolationReport}
-     * ({@code create.user.email}...)</li>
+     * a 0; {@code rut} requerido y válido. Si alguna falla → 400 con cada
+     * campo y sus mensajes: {"email": ["El email no tiene un formato
+     * válido"]} ({@link #validationErrors})</li>
      * </ul>
      * Todavía no hay persistencia: el usuario no se guarda, solo se devuelve.
      */
@@ -49,5 +56,15 @@ public class UserController {
         return RestResponse.ResponseBuilder.<UserDto>create(RestResponse.Status.CREATED)
                 .entity(user)
                 .build();
+    }
+
+    /**
+     * Errores de validación de este controller en formato simple: cada campo
+     * con la lista de sus mensajes, p. ej. {"name": ["El nombre es requerido"]}.
+     * La lógica es reutilizable y está en {@link ValidationErrors}.
+     */
+    @ServerExceptionMapper
+    public RestResponse<Map<String, List<String>>> validationErrors(ConstraintViolationException e) {
+        return ValidationErrors.badRequest(e);
     }
 }

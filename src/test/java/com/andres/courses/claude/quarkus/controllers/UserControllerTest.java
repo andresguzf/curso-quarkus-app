@@ -5,9 +5,9 @@ import static com.andres.courses.claude.quarkus.models.UserDto.NAME_MIN_LENGTH;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.aMapWithSize;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 
 import java.util.HashMap;
@@ -149,9 +149,8 @@ class UserControllerTest {
                 .when().post(USERS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(1))
-                .body("violations[0].field", is("create.user"))
-                .body("violations[0].message", is("El cuerpo del request es requerido: envía un usuario"));
+                .body("$", aMapWithSize(1))
+                .body("user", contains("El cuerpo del request es requerido: envía un usuario"));
     }
 
     @Test
@@ -163,9 +162,8 @@ class UserControllerTest {
                     .when().post(USERS)
                     .then()
                     .statusCode(400)
-                    .body("violations", hasSize(1))
-                    .body("violations[0].field", is("create.user.name"))
-                    .body("violations[0].message", is("El nombre es requerido"));
+                    .body("$", aMapWithSize(1))
+                    .body("name", contains("El nombre es requerido"));
         }
     }
 
@@ -179,12 +177,11 @@ class UserControllerTest {
                 .when().post(USERS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(4))
-                .body("violations.field", containsInAnyOrder(
-                        "create.user.lastName", "create.user.email", "create.user.age", "create.user.rut"))
-                .body("violations.message", containsInAnyOrder(
-                        "El apellido es requerido", "El email es requerido", "La edad es requerida",
-                        "El RUT es requerido"));
+                .body("$", aMapWithSize(4))
+                .body("lastName", contains("El apellido es requerido"))
+                .body("email", contains("El email es requerido"))
+                .body("age", contains("La edad es requerida"))
+                .body("rut", contains("El RUT es requerido"));
         // lo mismo si los campos ni siquiera vienen en el JSON
         givenJson()
                 .body("""
@@ -193,7 +190,7 @@ class UserControllerTest {
                 .when().post(USERS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(4));
+                .body("$", aMapWithSize(4));
     }
 
     @Test
@@ -204,18 +201,16 @@ class UserControllerTest {
                 .when().post(USERS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(1))
-                .body("violations[0].field", is("create.user.lastName"))
-                .body("violations[0].message", is("El apellido es requerido"));
+                .body("$", aMapWithSize(1))
+                .body("lastName", contains("El apellido es requerido"));
         // @Email acepta "" como válido: lo rechaza @NotBlank
         givenJson()
                 .body(user("Ana", "Pérez", "", 30))
                 .when().post(USERS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(1))
-                .body("violations[0].field", is("create.user.email"))
-                .body("violations[0].message", is("El email es requerido"));
+                .body("$", aMapWithSize(1))
+                .body("email", contains("El email es requerido"));
     }
 
     @Test
@@ -227,10 +222,8 @@ class UserControllerTest {
                     .when().post(USERS)
                     .then()
                     .statusCode(400)
-                    .body("violations", hasSize(1))
-                    .body("violations[0].field", is("create.user.name"))
-                    .body("violations[0].message",
-                            is("El nombre debe tener entre " + NAME_MIN_LENGTH + " y " + NAME_MAX_LENGTH + " caracteres"));
+                    .body("$", aMapWithSize(1))
+                    .body("name", contains("El nombre debe tener entre " + NAME_MIN_LENGTH + " y " + NAME_MAX_LENGTH + " caracteres"));
         }
     }
 
@@ -243,10 +236,8 @@ class UserControllerTest {
                     .when().post(USERS)
                     .then()
                     .statusCode(400)
-                    .body("violations", hasSize(1))
-                    .body("violations[0].field", is("create.user.lastName"))
-                    .body("violations[0].message",
-                            is("El apellido debe tener entre " + NAME_MIN_LENGTH + " y " + NAME_MAX_LENGTH + " caracteres"));
+                    .body("$", aMapWithSize(1))
+                    .body("lastName", contains("El apellido debe tener entre " + NAME_MIN_LENGTH + " y " + NAME_MAX_LENGTH + " caracteres"));
         }
     }
 
@@ -259,9 +250,8 @@ class UserControllerTest {
                     .when().post(USERS)
                     .then()
                     .statusCode(400)
-                    .body("violations", hasSize(1))
-                    .body("violations[0].field", is("create.user.email"))
-                    .body("violations[0].message", is("El email no tiene un formato válido"));
+                    .body("$", aMapWithSize(1))
+                    .body("email", contains("El email no tiene un formato válido"));
         }
     }
 
@@ -285,9 +275,8 @@ class UserControllerTest {
                 .when().post(USERS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(1))
-                .body("violations[0].field", is("create.user.age"))
-                .body("violations[0].message", is("La edad debe ser mayor o igual a 0"));
+                .body("$", aMapWithSize(1))
+                .body("age", contains("La edad debe ser mayor o igual a 0"));
     }
 
     @Test
@@ -317,9 +306,8 @@ class UserControllerTest {
                     .when().post(USERS)
                     .then()
                     .statusCode(400)
-                    .body("violations", hasSize(1))
-                    .body("violations[0].field", is("create.user.rut"))
-                    .body("violations[0].message", is("El RUT no es válido"));
+                    .body("$", aMapWithSize(1))
+                    .body("rut", contains("El RUT no es válido"));
         }
     }
 
@@ -332,13 +320,29 @@ class UserControllerTest {
                 .when().post(USERS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(1))
-                .body("violations[0].field", is("create.user.rut"))
-                .body("violations[0].message", is("El RUT es requerido"));
+                .body("$", aMapWithSize(1))
+                .body("rut", contains("El RUT es requerido"));
     }
 
     @Test
     @Order(17)
+    void crearUsuarioConVariasReglasFallidasEnUnCampoDevuelveTodosSusMensajes() {
+        // name vacío: fallan @NotBlank y @Size(min = 3), los dos mensajes van en la lista de name
+        givenJson()
+                .body(user("", "Pérez", "ana@correo.example", 30))
+                .when().post(USERS)
+                .then()
+                .statusCode(400)
+                .contentType(ContentType.JSON)
+                .body("$", aMapWithSize(1))
+                // en orden alfabético
+                .body("name", contains(
+                        "El nombre debe tener entre " + NAME_MIN_LENGTH + " y " + NAME_MAX_LENGTH + " caracteres",
+                        "El nombre es requerido"));
+    }
+
+    @Test
+    @Order(18)
     void crearUsuarioConTodoInvalidoDevuelveTodasLasViolaciones() {
         givenJson()
                 .body(user("Al", "Li", "ana", -1, "11.111.111-2"))
@@ -346,16 +350,17 @@ class UserControllerTest {
                 .then()
                 .statusCode(400)
                 .contentType(ContentType.JSON)
-                .body("title", is("Constraint Violation"))
-                .body("status", is(400))
-                .body("violations", hasSize(5))
-                .body("violations.field", containsInAnyOrder(
-                        "create.user.name", "create.user.lastName", "create.user.email", "create.user.age",
-                        "create.user.rut"));
+                // formato simple: cada campo con la lista de sus mensajes
+                .body("$", aMapWithSize(5))
+                .body("name", contains("El nombre debe tener entre " + NAME_MIN_LENGTH + " y " + NAME_MAX_LENGTH + " caracteres"))
+                .body("lastName", contains("El apellido debe tener entre " + NAME_MIN_LENGTH + " y " + NAME_MAX_LENGTH + " caracteres"))
+                .body("email", contains("El email no tiene un formato válido"))
+                .body("age", contains("La edad debe ser mayor o igual a 0"))
+                .body("rut", contains("El RUT no es válido"));
     }
 
     @Test
-    @Order(18)
+    @Order(19)
     void crearUsuarioEnXmlInvalidoDevuelveLasViolacionesEnXml() {
         String body = given()
                 .contentType(ContentType.XML)
@@ -367,16 +372,16 @@ class UserControllerTest {
                 .contentType(ContentType.XML)
                 .extract().asString();
 
-        assertThat(body, containsString("create.user.email"));
+        assertThat(body, containsString("<email>"));
         assertThat(body, containsString("El email no tiene un formato válido"));
-        assertThat(body, containsString("create.user.age"));
+        assertThat(body, containsString("<age>"));
         assertThat(body, containsString("La edad debe ser mayor o igual a 0"));
-        assertThat(body, containsString("create.user.rut"));
+        assertThat(body, containsString("<rut>"));
         assertThat(body, containsString("El RUT no es válido"));
     }
 
     @Test
-    @Order(19)
+    @Order(20)
     void crearUsuarioConAgeQueNoEsUnNumeroDevuelve400() {
         givenJson()
                 .body(user("Ana", "Pérez", "ana@correo.example", "treinta"))
@@ -386,7 +391,7 @@ class UserControllerTest {
     }
 
     @Test
-    @Order(20)
+    @Order(21)
     void metodoNoPermitidoEnUsersDevuelve405() {
         given()
                 .when().get(USERS)

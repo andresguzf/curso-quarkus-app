@@ -4,9 +4,9 @@ import static com.andres.courses.claude.quarkus.models.Product.NAME_MAX_LENGTH;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.aMapWithSize;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 
 import java.math.BigDecimal;
@@ -204,9 +204,8 @@ class ProductControllerTest {
                 .when().post(PRODUCTS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(1))
-                .body("violations[0].field", is("create.product"))
-                .body("violations[0].message", is("El cuerpo del request es requerido: envía un producto"));
+                .body("$", aMapWithSize(1))
+                .body("product", contains("El cuerpo del request es requerido: envía un producto"));
     }
 
     @Test
@@ -218,15 +217,11 @@ class ProductControllerTest {
                 .then()
                 .statusCode(400)
                 .contentType(ContentType.JSON)
-                .body("title", is("Constraint Violation"))
-                .body("status", is(400))
-                .body("violations", hasSize(3))
-                .body("violations.field", containsInAnyOrder(
-                        "create.product.name", "create.product.price", "create.product.quantity"))
-                .body("violations.message", containsInAnyOrder(
-                        "El nombre es requerido",
-                        "El precio es requerido",
-                        "La cantidad es requerida"));
+                // formato simple: cada campo con la lista de sus mensajes
+                .body("$", aMapWithSize(3))
+                .body("name", contains("El nombre es requerido"))
+                .body("price", contains("El precio es requerido"))
+                .body("quantity", contains("La cantidad es requerida"));
     }
 
     @Test
@@ -237,9 +232,8 @@ class ProductControllerTest {
                 .when().post(PRODUCTS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(1))
-                .body("violations[0].field", is("create.product.name"))
-                .body("violations[0].message", is("El nombre es requerido"));
+                .body("$", aMapWithSize(1))
+                .body("name", contains("El nombre es requerido"));
     }
 
     @Test
@@ -250,9 +244,8 @@ class ProductControllerTest {
                 .when().post(PRODUCTS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(1))
-                .body("violations[0].field", is("create.product.name"))
-                .body("violations[0].message", is("El nombre del producto admite hasta " + NAME_MAX_LENGTH + " caracteres"));
+                .body("$", aMapWithSize(1))
+                .body("name", contains("El nombre del producto admite hasta " + NAME_MAX_LENGTH + " caracteres"));
     }
 
     @Test
@@ -264,9 +257,8 @@ class ProductControllerTest {
                     .when().post(PRODUCTS)
                     .then()
                     .statusCode(400)
-                    .body("violations", hasSize(1))
-                    .body("violations[0].field", is("create.product.price"))
-                    .body("violations[0].message", is("El precio debe ser mayor que 0"));
+                    .body("$", aMapWithSize(1))
+                    .body("price", contains("El precio debe ser mayor que 0"));
         }
     }
 
@@ -278,9 +270,8 @@ class ProductControllerTest {
                 .when().post(PRODUCTS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(1))
-                .body("violations[0].field", is("create.product.price"))
-                .body("violations[0].message", is("El precio admite hasta 4 decimales"));
+                .body("$", aMapWithSize(1))
+                .body("price", contains("El precio admite hasta 4 decimales"));
     }
 
     @Test
@@ -291,9 +282,8 @@ class ProductControllerTest {
                 .when().post(PRODUCTS)
                 .then()
                 .statusCode(400)
-                .body("violations", hasSize(1))
-                .body("violations[0].field", is("create.product.quantity"))
-                .body("violations[0].message", is("La cantidad debe ser mayor o igual a 0"));
+                .body("$", aMapWithSize(1))
+                .body("quantity", contains("La cantidad debe ser mayor o igual a 0"));
     }
 
     @Test
@@ -310,9 +300,9 @@ class ProductControllerTest {
                 .contentType(ContentType.XML)
                 .extract().asString();
 
-        assertThat(body, containsString("create.product.name"));
+        assertThat(body, containsString("<name>"));
         assertThat(body, containsString("El nombre es requerido"));
-        assertThat(body, containsString("create.product.price"));
+        assertThat(body, containsString("<price>"));
         assertThat(body, containsString("El precio debe ser mayor que 0"));
     }
 
